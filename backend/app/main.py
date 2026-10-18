@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from app.db.mongo_client import mongo_client
 from app.db.neo4j_client import neo4j_client
+from app.routes.events import router as events_router
 
 
 @asynccontextmanager
@@ -19,6 +20,8 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+app.include_router(events_router)
 
 
 @app.get("/", tags=["Monitoring"])
