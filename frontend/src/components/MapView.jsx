@@ -48,10 +48,10 @@ export default function MapView({
   useEffect(() => {
     if (carte.current) return;
     carte.current = L.map("carte", { center: [36.825, 10.175], zoom: 13 });
-    L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-      { maxZoom: 19, attribution: "© OpenStreetMap · © CARTO" }
-    ).addTo(carte.current);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "© OpenStreetMap",
+    }).addTo(carte.current);
     couche.current = L.layerGroup().addTo(carte.current);
     setTimeout(() => carte.current.invalidateSize(), 200);
     window.addEventListener("resize", () => carte.current.invalidateSize());

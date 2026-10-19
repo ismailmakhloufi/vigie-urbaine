@@ -484,6 +484,11 @@ body {
   font-family: var(--font-head) !important;
 }
 
+/* mode nuit : on inverse les tuiles OpenStreetMap (gratuites, sans cle) */
+.leaflet-tile {
+  filter: invert(1) hue-rotate(190deg) brightness(0.72) contrast(1.05) saturate(0.55);
+}
+
 /* ---------- footer ---------- */
 
 .footer {

@@ -10,10 +10,38 @@ import {
 } from "./api.js";
 
 const TYPES_INCIDENT = [
-  { type: "HEAVY_RAIN", label: "🌧 Pluie extrême", classe: "btn-pluie", zoneSeule: true },
-  { type: "POWER_FAILURE", label: "⚡ Panne électrique", classe: "btn-panne" },
-  { type: "ROAD_BLOCKED", label: "🚧 Route bloquée", classe: "btn-route" },
-  { type: "CYBER_ATTACK", label: "📡 Cyberattaque", classe: "btn-cyber" },
+  {
+    type: "HEAVY_RAIN",
+    label: "🌧 Pluie extrême",
+    classe: "btn-pluie",
+    cibles: ["Zone"],
+    severite: "HIGH",
+    indice: "viser une zone (Z1/Z2)",
+  },
+  {
+    type: "POWER_FAILURE",
+    label: "⚡ Panne électrique",
+    classe: "btn-panne",
+    cibles: ["PowerStation"],
+    severite: "CRITICAL",
+    indice: "viser un poste (P1/P2)",
+  },
+  {
+    type: "ROAD_BLOCKED",
+    label: "🚧 Route bloquée",
+    classe: "btn-route",
+    cibles: ["Road"],
+    severite: "HIGH",
+    indice: "viser une route (R1/R2/R3)",
+  },
+  {
+    type: "CYBER_ATTACK",
+    label: "📡 Cyberattaque",
+    classe: "btn-cyber",
+    cibles: ["Hospital", "PowerStation", "TelecomTower", "Warehouse"],
+    severite: "HIGH",
+    indice: "viser une infra non-routière",
+  },
 ];
 
 export default function App() {
@@ -73,7 +101,7 @@ export default function App() {
     if (!cible) return;
     const contenu = {
       type: definition.type,
-      severity: definition.type === "HEAVY_RAIN" ? "CYBER" in definition ? "HIGH" : "HIGH" : "CRITICAL",
+      severity: definition.severite,
       target_id: cible.id,
       description: `Déclenché depuis l'interface — cible ${cible.name}`,
     };
@@ -186,12 +214,18 @@ export default function App() {
 
         <section>
           <div className="section-titre">Déclencher un incident</div>
+          {cible && (
+            <p style={{ fontSize: 11, color: "var(--ink-dim)", marginBottom: 6 }}>
+              Fascicule adapté : {TYPES_INCIDENT.filter((d) => d.cibles.includes(cible.kind)).map((d) => d.label).join(" · ") || "aucun incident possible sur ce type"}
+            </p>
+          )}
           <div className="boutons-incident">
             {TYPES_INCIDENT.map((d) => (
               <button
                 key={d.type}
                 className={`btn ${d.classe}`}
-                disabled={!cible || (d.zoneSeule && cible.kind !== "Zone")}
+                disabled={!cible || !d.cibles.includes(cible.kind)}
+                title={d.cibles.includes(cible?.kind) ? "" : `Compatible seulement : ${d.indice}`}
                 onClick={() => declencher(d)}
               >
                 {d.label}
