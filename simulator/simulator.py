@@ -52,7 +52,9 @@ db = _mongo[MONGO_DB]
 # Les deux zones du graphe avec leurs coordonnees
 SENSORS = [
     {"sensor_id": "weather_01", "zone": "Z1", "zone_name": "Tunis Centre", "lat": 36.80, "lon": 10.18},
-    {"sensor_id": "weather_02", "zone": "Z2", "zone_name": "Tunis Nord", "lat": 36.86, "lon": 10.16},
+    {"sensor_id": "weather_02", "zone": "Z2", "zone_name": "La Marsa", "lat": 36.87, "lon": 10.30},
+    {"sensor_id": "weather_03", "zone": "Z3", "zone_name": "L ARIANA", "lat": 36.86, "lon": 10.20},
+    {"sensor_id": "weather_04", "zone": "Z4", "zone_name": "Ben Arous", "lat": 36.75, "lon": 10.23},
 ]
 
 # Seuils meteo -> evenements (section 9 du cahier des charges)
@@ -66,14 +68,19 @@ COOLDOWN = timedelta(minutes=90)
 
 # Alertes cyber generees (format proche SIEM/EDR, section 9)
 CYBER_TYPES = ["RANSOMWARE", "DDOS", "DATA_EXFILTRATION", "PHISHING", "BRUTE_FORCE"]
-CYBER_TARGETS = ["P1", "P2", "T1", "T2", "H1", "H2", "W1"]
+CYBER_TARGETS = (
+    ["P1", "P2", "P3", "P4", "P5"]
+    + [f"H{i}" for i in range(1, 6)]
+    + [f"T{i}" for i in range(1, 11)]
+    + ["W1", "W2", "W3"]
+)
 CYBER_SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 CYBER_WEIGHTS = [4, 3, 2, 1]
 
 # Probabilites par tick : les incidents doivent rester RARES pour rester credibles
 P_CYBER = 0.10
 P_TECH = 0.05
-TECH_TARGETS = ["P1", "P2", "T1", "T2"]
+TECH_TARGETS = [f"P{i}" for i in range(1, 6)] + [f"T{i}" for i in range(1, 11)]
 
 
 def now_utc() -> datetime:

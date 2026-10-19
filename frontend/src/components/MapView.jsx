@@ -12,11 +12,12 @@ const COULEURS_STATUT = {
 };
 
 const TAILLES = {
-  Hospital: 15,
-  PowerStation: 13,
-  TelecomTower: 11,
-  Warehouse: 12,
-  Road: 9,
+  Hospital: 20,
+  PowerStation: 18,
+  TelecomTower: 15,
+  Warehouse: 16,
+  Pharmacy: 13,
+  Road: 11,
   Zone: null,
 };
 
@@ -63,7 +64,31 @@ export default function MapView({
     markers.current = {};
 
     for (const node of infra) {
-      if (node.kind === "Zone") continue;
+      if (node.kind === "Zone") {
+        const zone = L.circle([node.lat, node.lon], {
+          radius: 1600,
+          color: "#22d3ee",
+          weight: 1,
+          dashArray: "6 6",
+          fillColor: "#22d3ee",
+          fillOpacity: 0.05,
+        })
+          .addTo(couche.current)
+          .bindPopup(
+            `<b>Zone ${node.name}</b><br>Ciblée par la pluie extrême 🌧` +
+              (node.status && node.status !== "ONLINE" ? `<br>ALERTE MÉTÉO ACTIVE` : "")
+          );
+        const el = zone.getElement();
+        if (el) {
+          const pin = document.createElement("div");
+          pin.style = "position:relative;z-index:2;display:inline-block;display:none;";
+          el.appendChild(pin);
+          markers.current[node.id] = { marker: zone, el, pin };
+        }
+        zone.on("click", () => onSelection(node));
+        continue;
+      }
+
       const couleur = COULEURS_STATUT[node.status] || COULEURS_STATUT.UNKNOWN;
       const taille = TAILLES[node.kind] || 10;
       const critique = node.criticality >= 4;
@@ -134,7 +159,7 @@ export default function MapView({
 
   useEffect(() => {
     for (const [id, entry] of Object.entries(markers.current)) {
-      entry.pin.classList.toggle("fantome", fantomes.includes(id));
+      if (entry.pin) entry.pin.classList.toggle("fantome", fantomes.includes(id));
     }
   }, [fantomes, infra]);
 
