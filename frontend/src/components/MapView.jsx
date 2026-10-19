@@ -21,6 +21,15 @@ const TAILLES = {
   Zone: null,
 };
 
+const EMOJIS_NATURE = {
+  Hospital: "🏥",
+  PowerStation: "⚡",
+  TelecomTower: "📡",
+  Warehouse: "📦",
+  Pharmacy: "💊",
+  Road: "🛣️",
+};
+
 function iconePin(couleur, statut, critique, selectionne, fantome) {
   const classes = ["ub-pin"];
   if (selectionne) classes.push("selected");
@@ -123,7 +132,10 @@ export default function MapView({
         pin.style =
           `position:absolute;width:24px;height:24px;` +
           `color:${couleur};transform:translate(-50%,-50%);z-index:2;`;
-        pin.innerHTML = `<div class="coeur"></div><div class="etiquette">${node.id}</div>`;
+        pin.innerHTML =
+          `<div class="coeur"></div>` +
+          `<div class="symbole">${EMOJIS_NATURE[node.kind] || "📍"}</div>` +
+          `<div class="etiquette">${node.id}</div>`;
         el.appendChild(pin);
         markers.current[node.id] = { marker, el, pin };
       }
@@ -167,6 +179,14 @@ export default function MapView({
     <>
       <div id="carte" />
       <div className="legende">
+        <div className="legende-titre">Natures</div>
+        <span>🏥 Hôpital</span>
+        <span>⚡ Poste électrique</span>
+        <span>📡 Antenne telecom</span>
+        <span>📦 Dépôt logistique</span>
+        <span>💊 Pharmacie</span>
+        <span>🛣️ Route</span>
+        <div className="legende-titre" style={{ marginTop: 6 }}>Statuts (halo)</div>
         <span><i className="puce" style={{ background: "#34d399" }} /> Opérationnel</span>
         <span><i className="puce" style={{ background: "#fbbf24" }} /> Route bloquée</span>
         <span><i className="puce" style={{ background: "#f43f5e" }} /> Hors service</span>
