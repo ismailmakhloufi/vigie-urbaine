@@ -6,6 +6,7 @@ from app.db.mongo_client import mongo_client
 from app.db.neo4j_client import neo4j_client
 from app.routes.events import router as events_router
 from app.routes.risk import router as risk_router
+from app.routes.whatif import router as whatif_router
 
 
 @asynccontextmanager
@@ -24,6 +25,7 @@ app = FastAPI(
 
 app.include_router(events_router)
 app.include_router(risk_router)
+app.include_router(whatif_router)
 
 
 @app.get("/", tags=["Monitoring"])

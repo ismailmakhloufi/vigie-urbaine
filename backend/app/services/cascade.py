@@ -49,12 +49,19 @@ def compute_impact(event_id: str) -> ImpactSummary:
     if not head:
         raise LookupError(f"event '{event_id}' has no AFFECTS link in the graph")
 
-    event_type, severity, target_id = (
-        head[0]["type"],
-        head[0]["severity"],
-        head[0]["target_id"],
+    return build_impact(
+        head[0]["type"], head[0]["severity"], head[0]["target_id"], event_id=event_id
     )
 
+
+def compute_hypothetical(event_type: str, severity: str, target_id: str) -> ImpactSummary:
+    """Mode What-if : la meme cascade, mais sans toucher aucune base."""
+    return build_impact(event_type, severity, target_id, event_id=None)
+
+
+def build_impact(
+    event_type: str, severity: str, target_id: str, event_id: str | None
+) -> ImpactSummary:
     rows = _propagation_rows(event_type, target_id)
     incidents = _active_incidents()
 
@@ -84,7 +91,7 @@ def compute_impact(event_id: str) -> ImpactSummary:
     impacts = sorted(seen.values(), key=lambda n: n.depth)
 
     return ImpactSummary(
-        event_id=event_id,
+        event_id=event_id or "WHAT-IF",
         event_type=event_type,
         severity=severity,
         target_id=target_id,
