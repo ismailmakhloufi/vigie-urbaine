@@ -47,17 +47,14 @@ export default function MapView({
 
   useEffect(() => {
     if (carte.current) return;
-    carte.current = L.map("carte", {
-      center: [36.825, 10.175],
-      zoom: 13,
-      zoomControl: true,
-      attributionControl: true,
-    });
+    carte.current = L.map("carte", { center: [36.825, 10.175], zoom: 13 });
     L.tileLayer(
       "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
       { maxZoom: 19, attribution: "© OpenStreetMap · © CARTO" }
     ).addTo(carte.current);
     couche.current = L.layerGroup().addTo(carte.current);
+    setTimeout(() => carte.current.invalidateSize(), 200);
+    window.addEventListener("resize", () => carte.current.invalidateSize());
   }, []);
 
   useEffect(() => {
@@ -142,7 +139,7 @@ export default function MapView({
   }, [fantomes, infra]);
 
   return (
-    <div className="map-zone">
+    <>
       <div id="carte" />
       <div className="legende">
         <span><i className="puce" style={{ background: "#34d399" }} /> Opérationnel</span>
@@ -151,6 +148,6 @@ export default function MapView({
         <span><i className="puce" style={{ background: "#f472b6" }} /> Compromis (cyber)</span>
         <span><i className="puce" style={{ border: "2px dashed #a78bfa", background: "transparent" }} /> Prédiction What-if</span>
       </div>
-    </div>
+    </>
   );
 }
