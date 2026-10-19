@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.mongo_client import mongo_client
 from app.db.neo4j_client import neo4j_client
 from app.routes.events import router as events_router
+from app.routes.infra import router as infra_router
 from app.routes.risk import router as risk_router
 from app.routes.whatif import router as whatif_router
 
@@ -23,9 +25,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(events_router)
 app.include_router(risk_router)
 app.include_router(whatif_router)
+app.include_router(infra_router)
 
 
 @app.get("/", tags=["Monitoring"])
