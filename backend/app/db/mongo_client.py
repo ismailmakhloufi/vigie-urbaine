@@ -31,6 +31,17 @@ class MongoDbClient:
             {"_id": ObjectId(event_id)}, {"$set": {"status": status}}
         )
 
+    def count_active_events(self) -> int:
+        return self._db.events.count_documents({"status": {"$ne": "RESOLVED"}})
+
+    def get_active_events(self, limit: int = 100) -> list[dict]:
+        events = (
+            self._db.events.find({"status": {"$ne": "RESOLVED"}}, {"_id": 1})
+            .sort("timestamp", -1)
+            .limit(limit)
+        )
+        return [str(e["_id"]) for e in events]
+
     def list_events(self, limit: int = 50) -> list[dict]:
         events = self._db.events.find({}, {"_id": 0}).sort("timestamp", -1).limit(limit)
         return list(events)

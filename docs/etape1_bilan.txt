@@ -1,0 +1,215 @@
+﻿=================================================================
+URBAN BUTTERFLY - Bilan d'apprentissage - ETAPE 1
+(Phase 1 seulement : environnement + graphe de la ville)
+Date : 19 octobre 2026 - Commits concernes : 890b0fb
+=================================================================
+
+-----------------------------------------------------------------
+PARTIE 1 - CE QU'ON A FAIT (non technique)
+-----------------------------------------------------------------
+
+1.1. En 3 phrases : qu'est-ce qu'on a construit ?
+
+On a installe l'outil de travail du projet : les deux bases de
+donnees (Neo4j et MongoDB) qui tournent dans des "boites" isolÃ©es
+appellees conteneurs Docker, plus un petit serveur capable de
+communiquer avec elles. Ensuite on a dessine et construit une
+mini-ville virtuelle : 12 infrastructures (hopitaux, postes
+electriques, antennes, routes, depot) reliees entre elles comme un
+grand plan de dependances. enfin on a verifie que le coeur du
+projet fonctionne : quand un poste electrique tombe en panne, le
+systeme retrouve automaticquement les infrastructures qui en
+souffrent.
+
+1.2. Avant / Apres sur le PC
+
+AVANT : un dossier presque vide avec juste Git d'initialise.
+Aucun programme programme installe pour le projet.
+APRES :
+  - Docker Desktop tourne avec 2 bases de donnees pretes
+  - un environnement Python dedie au projet
+  - un serveur API qui repond et verifie la sante des bases
+  - une ville complete memorisee dans Neo4j, rechargeable a
+    l'identique
+  - 2 commits Git qui conservent tout ce travail
+
+1.3. Pourquoi commencer par le graphe ?
+
+IDE-CLÉ : on teste d'abord l'hypothese la plus risquee du projet.
+Tout Urban Butterfly repose sur une seule question : "peut-on
+modeliser une ville en graphe et retrouver les victimes d'une
+panne automatiquement ?". Si la reponse avait ete non, tout le
+projet tombait (frontend, IA, etc. n'auraient servi a rien). En
+le testant en premier, on sÃ©curise le reste. C'est aussi le plan
+de la section 24 du cahier des charges.
+
+-----------------------------------------------------------------
+PARTIE 2 - CE QU'ON A FAIT (technique)
+-----------------------------------------------------------------
+
+2.1. La commande qui lance tout, et son fichier de config
+
+Commande : docker compose up -d
+Fichier :  docker-compose.yml (a la racine du projet)
+Il decrit 2 services :
+  - neo4j (image neo4j:5.26), ports 7474 (web) et 7687 (protocol
+    Bolt pour que Python parle a la base)
+  - mongodb (image mongo:7), porte 27017
+Chaque service a un "health_check" : une petite commande testÃ©e
+periodiquement ; si elle repond, Docker marque la base en etat
+"healthy". Volumes nommes (neo4j_data, mongo_data) : les donnees
+surviennent au redemarrage du PC.
+
+2.2. Ports a retenir
+
+  - Neo4j Browser (interface web) ... port 7474 ... URL :
+    http://localhost:7474 ... user: neo4j, mdp: urbanbutterfly
+  - Neo4j Bolt (protocole client) ... port 7687
+  - MongoDB ........................... port 27017
+  - API FastAPI ....................... port 8000
+
+2.3. Pourquoi Docker au lieu d'une installation directe ?
+
+  - Reproductibilite : le meme docker-compose.yml redonne
+    exactement les memes versions partout (notrement si on
+    réinstallé sur une autre machine, ou chez le jury).
+  - Propriete : rien ne salit le systeme Windows ; si on veut
+    tout supprimer, on supprime les conteneurs et c'est fini.
+
+2.4. Structure des dossiers et role de chaque fichier
+
+    nosql/
+    |-- docker-compose.yml      -> configure et lance Neo4j + MongoDB
+    |-- .gitignore              -> liste ce que Git doit ignorÃ©r
+    |                             (mots de passe .env, venv, node_modules)
+    |-- .env                    -> identifiants des bases (NON versionnÃ©)
+    |-- backend/
+    |   |- .venv/               -> environnement Python isole :
+    |   |                          les bibliotheques propres au projet
+    |   |- requirements.txt     -> la liste a installer
+    |   |                          (fastapi, uvicorn, neo4j, pymongo...)
+    |   |- app/main.py          -> le point d'entree de l'API ;
+    |                              definit les endpoints
+    |   |- app/core/config.py   -> lit .env proprement et met des
+    |                              valeurs par defaut
+    |   |- app/db/neo4j_client.py -> le "pont" Python -> Neo4j
+    |   |- app/db/mongo_client.py -> le "pont" Python -> MongoDB
+    \-- data/
+        \-- seed.cypher         -> le plan de la ville : chaque
+                                   instruction construit une partie
+                                   du graphe
+
+2.5. Le graphe de la ville (les chiffres)
+
+  Total noeuds : 12
+    - 2 zones (Z1 Tunis Centre, Z2 Tunis Nord)
+    - 2 postes electriques (P1, P2)
+    - 2 antennes telecom (T1, T2)
+    - 2 hopitaux (H1, H2) : H1 n'a PAS de groupe electrogene
+      (backup_power_hours: 0), stock medoc 2 jours
+    - 3 routes (R1, R2, R3), toutes en statut CLEAR
+    - 1 depot logistique (W1)
+  Total relations : 21
+    DEPENDS_ON   (4) : "j'ai besoin de"  H1->P1, H2->P2,
+                           T1->P1, T2->P2
+    CONNECTED_BY (5) : "je suis accessible par"  routes
+    SUPPLIED_BY  (2) : "je recois mes fournitures de"  H1->W1,
+                           H2->W1
+    LOCATED_IN  (10) : "je suis dans tel quartier"
+
+2.6. Trois mots-cles Cypher indispensables
+
+  - MERGE  : "cree le noeud/lien s'il n'existe pas, sinon utilise
+    celui qui existe" -> idempotent (ne fait jamais de doublons).
+  - MATCH  : "retrouve ce qui existe deja" (par label + id).
+  - CREATE CONSTRAINT ... IS UNIQUE : regle de base de donnees
+    pour interdire des doublons sur l'id.
+
+2.7. Chaine complete de creation du graphe
+
+    (a) On ecrit le plan dans data/seed.cypher
+    (b) On le copie dans le conteneur : docker cp seed.cypher ub_neo4j:/tmp/
+    (c) On l'execute : docker exec ub_neo4j cypher-shell -u neo4j
+        -p urbanbutterfly -f /tmp/seed.cypher
+    (d) mots de passe de test : neo4j / urbanbutterfly
+    (e) visualization : http://localhost:7474
+        Requete bonus pour tout voir :
+        MATCH (n) OPTIONAL MATCH (n)-[r]->(m) RETURN n, r, m
+
+2.8. Le test de validation de la section 24
+
+On simule la panne du poste P1 en mettant son statut a OFFLINE.
+Neo4j retrouve automatiquement les infrastructures touchees :
+T1 (antenne) et H1 (hopital), critiques parce que H1 n'a pas de
+groupe electrogene de secours.
+
+Requete Cypher du test :
+  MATCH p = (x)-[:DEPENDS_ON*1..5]->(p0:PowerStation {id:'P1'})
+  WHERE p0.status = 'OFFLINE'
+  RETURN x.id, x.kind, length(p) AS profondeur
+
+Pourquoi ca marche : la relation DEPENDS_ON encodes deja la
+dependance; Neo4j parcourt le "chemin" depuis la panne vers ceux
+qui en dependent. La profondeur = nombre de sauts.
+
+2.9. Pourquoi le seed est "idempotent"
+
+MERGE + IF NOT EXISTS permettent de rejouer seed.cypher infinite
+fois sans jamais dupliquer de donnees. En pratique : le jour de la
+soutenance on peut repartir d'une base vide et reconstruire la
+ville a l'identique en 2 commandes = preuve de reproductibilite
+des resultats.
+
+2.10. Un detail d'architecture appris : le pattern polyglot
+
+Les identifiants des infrastructures au Neo4j correspondront
+future Ã  des documents dans MongoDB : le graphe porte les RELATIONS,
+le document store porte le DETAIL des donnees. C'est la raison
+pour laquelle les 2 bases sont toutes les deux presentes (
+approach "polyglot persistence" du cahier des charges).
+\----------------------------------------------------------------
+
+-----------------------------------------------------------------
+PARTIE 3 - VOCABULAIRE (definitions utilisees dans le projet)
+-----------------------------------------------------------------
+
+  - NoSQL : famille de bases de donnees non relationnelles
+    (clÃ©-valeur, document, graphe...), pensÃ©e pour des modesles
+    que le schema fixe d'une base SQL porte mal.
+  - Base orientee graphe : base ou les DONNEES impliquÃ©s sont des
+    relations-reliÃ©es entre-aux (Neo4j est celle-ci).
+  - Document : unitÃ© de stockage MongoDB = un objet JSON flexible,
+    champs libres d'un document a l'autre.
+  - Conteneur (Docker) : boite d'execution isolee contenant une
+    application + ses dependances ; se lance/arrete d'une commande.
+  - venv : copie isolee de Python pour un projet, qui evite de
+    mélanger les version entre projets.
+  - API / endpoint : porte de communication HTTP du serveur ;
+    un endpoint = une route precise (ex: /health).
+  - Cypher : langage de requetage declare de Neo4j (le "SQL du
+    graphe").
+  - Idempotent : rejouer une operation N fois donne le mÃªme
+    resultat final que 1 fois.
+  - Commit (Git) : point de sauvegare nomme de l'historique du
+    code ; permet de revenir en arriere a t Ð²Ð¾Ð·Ð´ÐµÐ¹ÑÑ‚Ð²Ñƒ.
+
+-----------------------------------------------------------------
+PARTIE 4 - ANNEX : MES REMARQUES PERSONNELLES
+-----------------------------------------------------------------
+
+((zone a personnaliser : ce qui etait clair, flou, erreurs
+rencontrees...))
+
+  - Error/blocages rencontres :
+      * Docker daemon pas lance -> il fallait demarrer Docker
+        Desktop avant docker compose
+      * healthcheck MongoDB "unhealthy" a cause d'un mauvais
+        echaptement de la commande de test -> corrige dans
+        docker-compose.yml
+      * Type mismatch Cypher sur un calcul de profondeur ->
+        corrigé en utilisant une variable de chemin (p) et
+        length(p)
+  - choses a reprendre avant la soutenance :
+      * relire seed.cypher en entier
+      * rejouer le scénario de panne P1 sur http://localhost:7474
+\-----------------------------------------------------------------
