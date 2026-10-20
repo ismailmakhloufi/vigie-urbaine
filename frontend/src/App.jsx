@@ -76,6 +76,7 @@ export default function App() {
   const [chat, setChat] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const chatLog = useRef(null);
 
   const refresh = async () => {
@@ -403,51 +404,6 @@ export default function App() {
             ))
           )}
         </section>
-
-        <section className="chat-panel">
-          <div className="section-titre">💬 Copilote IA (Llama 3.1)</div>
-          <div className="chat-log" ref={chatLog}>
-            {chat.length === 0 ? (
-              <div className="empty-state">
-                Interrogez le jumeau numérique : le graphe fournit les faits, l'IA reformule.
-              </div>
-            ) : (
-              chat.map((msg, i) => (
-                <div
-                  className={`chat-bubble ${msg.role === "user" ? "user" : "ai"}`}
-                  key={i}
-                >
-                  {msg.text}
-                  {msg.mode && (
-                    <div className="mode-note">
-                      {msg.mode === "llm" ? "graphe + Llama 3.1" : "résumé local (LLM off)"}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-          <div className="chat-chips">
-            <button onClick={() => envoyerChat("Pourquoi H1 est-il critique ?")}
-              disabled={chatBusy}>Pourquoi H1 ?</button>
-            <button onClick={() => envoyerChat("Que faire pour R19 ?")}
-              disabled={chatBusy}>Plan R19</button>
-            <button onClick={() => envoyerChat("Briefing")}
-              disabled={chatBusy}>📋 Briefing</button>
-          </div>
-          <div className="chat-input">
-            <input
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") envoyerChat(); }}
-              placeholder="Posez une question (ex. pourquoi T7, quel impact pour Z2...)"
-              disabled={chatBusy}
-            />
-            <button onClick={() => envoyerChat()} disabled={chatBusy || !chatInput.trim()}>
-              {chatBusy ? "…" : "→"}
-            </button>
-          </div>
-        </section>
       </aside>
 
       <main className="map-zone">
@@ -462,6 +418,88 @@ export default function App() {
         />
         {toast && <div className="toast">{toast}</div>}
       </main>
+
+      {chatOpen && (
+        <div className="messenger">
+          <div className="messenger-header">
+            <div className="messenger-identite">
+              <span className="messenger-avatar">🦋</span>
+              <div>
+                <b>Copilote IA</b>
+                <small>
+                  {chatBusy ? "écrit…" : "graphe + Llama 3.1 · Grand Tunis"}
+                </small>
+              </div>
+            </div>
+            <button
+              className="messenger-close"
+              onClick={() => setChatOpen(false)}
+              title="Fermer"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="chat-log" ref={chatLog}>
+            {chat.length === 0 ? (
+              <div className="empty-state">
+                Interrogez le jumeau numérique : le graphe fournit les faits, l'IA reformule.
+              </div>
+            ) : (
+              chat.map((msg, i) => (
+                <div
+                  className={`chat-bubble msg-${msg.role}`}
+                  key={i}
+                >
+                  {msg.text}
+                  {msg.mode && (
+                    <div className="mode-note">
+                      {msg.mode === "llm" ? "graphe + Llama 3.1" : "résumé local (LLM off)"}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+            {chatBusy && (
+              <div className="chat-bubble msg-ai en-attente">
+                <span className="point-anim" />
+                <span className="point-anim" />
+                <span className="point-anim" />
+              </div>
+            )}
+          </div>
+
+          <div className="chat-chips">
+            <button onClick={() => envoyerChat("Pourquoi H1 est-il critique ?")}
+              disabled={chatBusy}>Pourquoi H1 ?</button>
+            <button onClick={() => envoyerChat("Que faire pour R19 ?")}
+              disabled={chatBusy}>Plan R19</button>
+            <button onClick={() => envoyerChat("Briefing")}
+              disabled={chatBusy}>📋 Briefing</button>
+          </div>
+
+          <div className="chat-input">
+            <input
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") envoyerChat(); }}
+              placeholder="Poser une question au jumeau numérique..."
+              disabled={chatBusy}
+            />
+            <button onClick={() => envoyerChat()} disabled={chatBusy || !chatInput.trim()}>
+              {chatBusy ? "…" : "→"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <button
+        className={`fab-copilote ${chatOpen ? "ouvert" : ""}`}
+        onClick={() => setChatOpen((o) => !o)}
+        title="Copilote IA"
+      >
+        {chatOpen ? "✕" : "🦋"}
+      </button>
 
       <aside className="risk-center">
         <div className="risk-center-header">
