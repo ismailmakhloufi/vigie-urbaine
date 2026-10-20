@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
 
+    ollama_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "llama3.1"
+
 
 @lru_cache
 def get_settings() -> Settings:

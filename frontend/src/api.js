@@ -34,3 +34,12 @@ export const getEventImpact = (id) =>
 
 export const getEventRecommendations = (id) =>
   apiFetch(`/events/${id}/recommendations`);
+
+export const aiAsk = (question) =>
+  apiFetch("/ai/ask", {
+    method: "POST",
+    body: JSON.stringify({ question }),
+  });
+
+export const aiBriefing = () =>
+  apiFetch("/ai/briefing", { method: "POST" });

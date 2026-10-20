@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MapView from "./components/MapView.jsx";
 import {
   getInfrastructure,
@@ -6,6 +6,8 @@ import {
   getEvents,
   getEventImpact,
   getEventRecommendations,
+  aiAsk,
+  aiBriefing,
   postEvent,
   postWhatif,
   resolveEvent,
@@ -71,6 +73,10 @@ export default function App() {
   const [risqueSelectionne, setRisqueSelectionne] = useState(null);
   const [cascade, setCascade] = useState(null);
   const [plan, setPlan] = useState(null);
+  const [chat, setChat] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const chatLog = useRef(null);
 
   const refresh = async () => {
     try {
@@ -216,6 +222,34 @@ export default function App() {
       setToast(`⛔ ${exc.message}`);
     }
   };
+
+  const envoyerChat = async (question) => {
+    const q = (question || chatInput).trim();
+    if (!q || chatBusy) return;
+
+    const suivants = [...chat, { role: "user", text: q }];
+    setChat(suivants);
+    setChatInput("");
+    setChatBusy(true);
+
+    try {
+      if (q.toLowerCase() === "briefing") {
+        const r = await aiBriefing();
+        setChat([...suivants, { role: "ai", text: r.text, mode: r.mode }]);
+      } else {
+        const r = await aiAsk(q);
+        setChat([...suivants, { role: "ai", text: r.answer, mode: r.mode }]);
+      }
+    } catch (exc) {
+      setChat([...suivants, { role: "ai", text: `⛔ IA indisponible : ${exc.message}` }]);
+    } finally {
+      setChatBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (chatLog.current) chatLog.current.scrollTop = chatLog.current.scrollHeight;
+  }, [chat]);
 
   const resoudre = async (id) => {
     try {
@@ -368,6 +402,51 @@ export default function App() {
               </article>
             ))
           )}
+        </section>
+
+        <section className="chat-panel">
+          <div className="section-titre">💬 Copilote IA (Llama 3.1)</div>
+          <div className="chat-log" ref={chatLog}>
+            {chat.length === 0 ? (
+              <div className="empty-state">
+                Interrogez le jumeau numérique : le graphe fournit les faits, l'IA reformule.
+              </div>
+            ) : (
+              chat.map((msg, i) => (
+                <div
+                  className={`chat-bubble ${msg.role === "user" ? "user" : "ai"}`}
+                  key={i}
+                >
+                  {msg.text}
+                  {msg.mode && (
+                    <div className="mode-note">
+                      {msg.mode === "llm" ? "graphe + Llama 3.1" : "résumé local (LLM off)"}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+          <div className="chat-chips">
+            <button onClick={() => envoyerChat("Pourquoi H1 est-il critique ?")}
+              disabled={chatBusy}>Pourquoi H1 ?</button>
+            <button onClick={() => envoyerChat("Que faire pour R19 ?")}
+              disabled={chatBusy}>Plan R19</button>
+            <button onClick={() => envoyerChat("Briefing")}
+              disabled={chatBusy}>📋 Briefing</button>
+          </div>
+          <div className="chat-input">
+            <input
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") envoyerChat(); }}
+              placeholder="Posez une question (ex. pourquoi T7, quel impact pour Z2...)"
+              disabled={chatBusy}
+            />
+            <button onClick={() => envoyerChat()} disabled={chatBusy || !chatInput.trim()}>
+              {chatBusy ? "…" : "→"}
+            </button>
+          </div>
         </section>
       </aside>
 
