@@ -45,9 +45,13 @@ export default function MapView({
   fantomes,
   riskById = {},
   itineraires = [],
+  trajet = null,
+  missions = [],
 }) {
   const carte = useRef(null);
   const couche = useRef(null);
+  const coucheTrajet = useRef(null);
+  const coucheMissions = useRef(null);
   const markers = useRef({});
 
   useEffect(() => {
@@ -65,6 +69,8 @@ export default function MapView({
     }).addTo(carte.current);
 
     couche.current = L.layerGroup().addTo(carte.current);
+    coucheTrajet.current = L.layerGroup().addTo(carte.current);
+    coucheMissions.current = L.layerGroup().addTo(carte.current);
 
     const resize = () => carte.current?.invalidateSize();
     setTimeout(resize, 150);
@@ -301,6 +307,104 @@ export default function MapView({
 
     return () => timers.forEach(clearTimeout);
   }, [vaguesCascades]);
+
+  useEffect(() => {
+    const layer = coucheTrajet.current;
+    if (!layer) return;
+    layer.clearLayers();
+    if (!trajet || !Array.isArray(trajet.coords) || trajet.coords.length < 4) return;
+
+    const latlngs = trajet.coords;
+
+    L.polyline(latlngs, {
+      color: "#34d399",
+      weight: 12,
+      opacity: 0.14,
+      lineCap: "round",
+    }).addTo(layer);
+
+    L.polyline(latlngs, {
+      color: "#34d399",
+      weight: 4.5,
+      opacity: 0.95,
+      lineCap: "round",
+    })
+      .addTo(layer)
+      .bindPopup(
+        `<div class="map-popup">` +
+          `<b>🚑 ${trajet.profile} · ${trajet.origin_name} → ${trajet.destination_name}</b><br>` +
+          `${trajet.estimated_time_min} min · ${trajet.distance_km} km<br>` +
+          `via ${trajet.route_names?.join(" › ") || "…"}` +
+        `</div>`
+      );
+
+    L.circleMarker([latlngs[0], latlngs[1]], {
+      radius: 7,
+      color: "#34d399",
+      fillColor: "#34d399",
+      fillOpacity: 0.9,
+      weight: 2,
+    }).addTo(layer);
+
+    L.circleMarker([latlngs[latlngs.length - 2], latlngs[latlngs.length - 1]], {
+      radius: 7,
+      color: "#f43f5e",
+      fillColor: "#f43f5e",
+      fillOpacity: 0.9,
+      weight: 2,
+    }).addTo(layer);
+
+    carte.current?.fitBounds(L.latLngBounds(latlngs).pad(0.35));
+  }, [trajet]);
+
+  useEffect(() => {
+    const layer = coucheMissions.current;
+    if (!layer) return;
+    layer.clearLayers();
+
+    for (const mission of missions) {
+      const path = mission.path || [];
+      if (path.length < 4) continue;
+
+      const couleur =
+        mission.status === "BLOCKED" ? "#f43f5e" : mission.status === "DIVERTED" ? "#22d3ee" : "#34d399";
+
+      L.polyline(path, {
+        color: couleur,
+        weight: 11,
+        opacity: 0.13,
+        lineCap: "round",
+      }).addTo(layer);
+
+      L.polyline(path, {
+        color: couleur,
+        weight: 3,
+        opacity: 0.85,
+        dashArray: mission.status === "DIVERTED" ? "8 7" : null,
+        lineCap: "round",
+      })
+        .addTo(layer)
+        .bindPopup(
+          `<div class="map-popup">` +
+            `<b>🚨 Mission ${mission.mission_id} · ${mission.profile}</b><br>` +
+            `${mission.origin_name} → ${mission.destination_name}<br>` +
+            `${(mission.progress * 100).toFixed(0)}% · ETA ${mission.remaining_min} min` +
+          `</div>`
+        );
+
+      const [lat, lon] = mission.position || [];
+      if (lat != null && lon != null) {
+        L.marker([lat, lon], {
+          icon: L.divIcon({
+            className: "ub-vehicle-icon",
+            html: `<div class="ub-vehicle" style="--c:${couleur}">🚑</div>`,
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+          }),
+        }).addTo(layer);
+      }
+    }
+  }, [missions]);
 
   return (
     <>

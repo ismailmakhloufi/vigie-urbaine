@@ -574,3 +574,183 @@ button { font: inherit; }
     grid-template-columns: 285px 1fr 285px;
   }
 }
+
+/* ===== ROUTAGE D'URGENCE ===== */
+.routing-panel {
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  border-radius: 14px;
+  padding: 14px;
+  background: linear-gradient(160deg, rgba(52, 211, 153, 0.07), rgba(15, 23, 42, 0.35));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.routing-panel .section-titre { color: #34d399; }
+.routing-form { display: flex; flex-direction: column; gap: 8px; }
+.routing-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.55);
+}
+.routing-form select {
+  background: rgba(2, 6, 23, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 9px;
+  color: #e2e8f0;
+  padding: 7px 9px;
+  font-size: 0.82rem;
+  outline: none;
+}
+.routing-form select:focus { border-color: #34d399; }
+.routing-actions { display: flex; gap: 8px; }
+.routing-actions .btn-primaire {
+  flex: 1;
+  background: linear-gradient(120deg, #10b981, #22d3ee);
+  border: none;
+  color: #04121b;
+  font-weight: 700;
+  padding: 9px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.routing-actions .btn-primaire:disabled { opacity: 0.45; cursor: wait; }
+.routing-result {
+  border-top: 1px dashed rgba(52, 211, 153, 0.35);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.routing-eta { display: flex; gap: 8px; }
+.routing-eta > div {
+  flex: 1;
+  background: rgba(2, 6, 23, 0.6);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  border-radius: 10px;
+  padding: 7px 9px;
+  display: flex;
+  flex-direction: column;
+}
+.routing-eta strong { color: #34d399; font-size: 1.05rem; }
+.routing-eta span { font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(226, 232, 240, 0.5); }
+.routing-path { display: flex; flex-wrap: wrap; gap: 5px; }
+.routing-seg {
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  color: #a7f3d0;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 0.72rem;
+}
+.routing-avoided { display: flex; flex-wrap: wrap; gap: 5px; }
+.avoid-chip {
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.45);
+  color: #fda4af;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 0.7rem;
+}
+.routing-note { color: rgba(226, 232, 240, 0.6); font-size: 0.72rem; }
+
+/* ===== MISSIONS SAMU ===== */
+.missions-panel {
+  border: 1px solid rgba(244, 63, 94, 0.28);
+  border-radius: 14px;
+  padding: 14px;
+  background: linear-gradient(160deg, rgba(244, 63, 94, 0.06), rgba(15, 23, 42, 0.35));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.missions-panel .section-titre { color: #fb7185; }
+.missions-panel .btn-danger {
+  background: linear-gradient(120deg, #f43f5e, #f59e0b);
+  border: none;
+  color: #1a0509;
+  font-weight: 700;
+  padding: 9px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.missions-panel .btn-danger:disabled { opacity: 0.45; cursor: wait; }
+.mission-card {
+  background: rgba(2, 6, 23, 0.65);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-left: 3px solid #34d399;
+  border-radius: 10px;
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.mission-card.m-diverted { border-left-color: #22d3ee; }
+.mission-card.m-blocked { border-left-color: #f43f5e; }
+.mission-card.m-arrived, .mission-card.m-cancelled { border-left-color: #475569; opacity: 0.75; }
+.mission-head { display: flex; justify-content: space-between; align-items: center; }
+.mission-id { font-weight: 700; color: #e2e8f0; font-size: 0.85rem; }
+.mission-status {
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.15);
+  color: #6ee7b7;
+}
+.m-diverted .mission-status { background: rgba(34, 211, 238, 0.15); color: #67e8f9; }
+.m-blocked .mission-status { background: rgba(244, 63, 94, 0.18); color: #fda4af; }
+.m-arrived .mission-status, .m-cancelled .mission-status { background: rgba(71, 85, 105, 0.25); color: #94a3b8; }
+.mission-route-noms { font-size: 0.78rem; color: rgba(226, 232, 240, 0.85); }
+.mission-progress-track {
+  position: relative;
+  height: 8px;
+  background: rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  overflow: visible;
+}
+.mission-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #10b981, #34d399);
+  transition: width 1s linear;
+}
+.mission-vehicle {
+  position: absolute;
+  top: -11px;
+  left: 0;
+  font-size: 0.95rem;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.8));
+  transition: left 1s linear;
+}
+.mission-progress small { display: block; margin-top: 4px; color: rgba(226, 232, 240, 0.55); font-size: 0.68rem; }
+.mission-timeline { display: flex; flex-direction: column; gap: 3px; }
+.mission-log { display: flex; gap: 7px; font-size: 0.68rem; color: rgba(226, 232, 240, 0.75); }
+.mission-log time { color: rgba(148, 163, 184, 0.8); font-variant-numeric: tabular-nums; }
+.mission-cancel {
+  align-self: flex-end;
+  background: none;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #94a3b8;
+  border-radius: 8px;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+.mission-cancel:hover { border-color: #f43f5e; color: #fda4af; }
+
+/* vehicule sur la carte */
+.leaflet-marker-icon.ub-vehicle-icon { transition: transform 1s linear; background: none; border: none; }
+.ub-vehicle {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  font-size: 17px;
+  background: rgba(2, 6, 23, 0.85);
+  border: 2px solid var(--c, #34d399);
+  border-radius: 50%;
+  box-shadow: 0 0 12px 2px var(--c, #34d399);
+}

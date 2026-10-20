@@ -171,8 +171,91 @@ def _find_by_name(question: str) -> str | None:
     return candidates[0]["id"] if candidates else None
 
 
+_ITINERAIRE_RE = re.compile(
+    r"\b(itin[ée]raire|trajet|acheminer|acheminement|routage|router|"
+    r"aller de|rejoindre|convoyer|secours routier)\b",
+    re.IGNORECASE,
+)
+_PROFILE_RE = re.compile(r"\b(ambulance|logistique|supply|normal|standard)\b", re.IGNORECASE)
+
+
+def _routing_intent(question: str) -> dict | None:
+    """
+    Détecte une demande d'itinéraire : "itinéraire de W1 à H1",
+    "acheminer des fonds depuis W2 vers H4"...
+    L'IA ne calcule JAMAIS la route elle-même : c'est compute_route qui décide.
+    """
+    if not _ITINERAIRE_RE.search(question):
+        return None
+
+    ids = [m.group(0).upper() for m in re.finditer(
+        r"\b(?:ph\d{1,2}|[hptrwz]\d{1,2})\b", question, re.IGNORECASE
+    )]
+    ids = list(dict.fromkeys(ids))
+    if len(ids) < 2:
+        return None
+
+    profile = "AMBULANCE"
+    p = _PROFILE_RE.search(question)
+    if p:
+        word = p.group(1).lower()
+        profile = {"logistique": "SUPPLY", "supply": "SUPPLY",
+                   "normal": "NORMAL", "standard": "NORMAL"}.get(word, "AMBULANCE")
+
+    return {"origin": ids[0], "destination": ids[1], "profile": profile}
+
+
+def _format_route_answer(route: dict) -> str:
+    lignes = [
+        f"🚑 Itinéraire {route['profile']} : {route['origin_name']} → "
+        f"{route['destination_name']}",
+        f"⏱ {route['estimated_time_min']} min · 📏 {route['distance_km']} km",
+        "🛣 " + " › ".join(route["route_names"]),
+    ]
+    if route["avoided"]:
+        lignes.append(
+            "⛔ Évité : " + ", ".join(
+                f"{a.get('name', a['id'])} ({a['reason']})" for a in route["avoided"][:5]
+            )
+        )
+    for note in route.get("dynamic_notes", []):
+        lignes.append(f"🌐 {note}")
+    return "\n".join(lignes)
+
+
 def answer_question(question: str) -> dict:
     """Chat IA explicatif principal."""
+    intent = _routing_intent(question)
+
+    if intent:
+        from app.services.routing import compute_route
+
+        try:
+            route = compute_route(intent["origin"], intent["destination"], intent["profile"])
+        except (LookupError, RuntimeError) as exc:
+            return {
+                "answer": f"⛔ Routing impossible : {exc}",
+                "mode": "routing-error",
+                "facts": {"intent": intent},
+            }
+
+        facts_payload = {"question": question, "itineraire_calcule": route}
+        facts_text = json.dumps(facts_payload, ensure_ascii=False, indent=1)
+        prompt = (
+            f"Question de l'opérateur : {question}\n\n"
+            f"<<<FAITS>>>\n{facts_text}\n<<<FIN>>>\n\n"
+            "Un moteur de routage déterministe (Dijkstra sur le graphe routier) a déjà "
+            "calculé l'itinéraire ci-dessus. Confirme-le en 2-4 phrases : origine, "
+            "arrivée, temps, routes évitées et pourquoi. N'invente AUCUNE route, "
+            "AUCUN chiffre hors des faits."
+        )
+        try:
+            content = _llm_chat(SYSTEM_PROMPT, prompt)
+            mode = "routing-llm"
+        except RuntimeError:
+            content, mode = _format_route_answer(route), "routing"
+        return {"answer": content, "mode": mode, "facts": facts_payload, "route": route}
+
     node_id = _extract_node_id(question)
 
     if node_id is None and len(question.strip()) > 6:

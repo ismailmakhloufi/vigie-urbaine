@@ -46,6 +46,31 @@ class MongoDbClient:
         events = self._db.events.find({}, {"_id": 0}).sort("timestamp", -1).limit(limit)
         return list(events)
 
+    def insert_mission(self, mission: dict):
+        return self._db.missions.insert_one(mission)
+
+    def get_mission(self, mission_id: str) -> dict | None:
+        return self._db.missions.find_one({"mission_id": mission_id})
+
+    def active_missions(self) -> list[dict]:
+        return list(
+            self._db.missions.find({"status": {"$in": ["EN_ROUTE", "DIVERTED"]}})
+            .sort("departure_at", 1)
+        )
+
+    def all_missions(self, limit: int = 30) -> list[dict]:
+        return list(
+            self._db.missions.find().sort("departure_at", -1).limit(limit)
+        )
+
+    def update_mission(self, mission_id: str, fields: dict):
+        return self._db.missions.update_one(
+            {"mission_id": mission_id}, {"$set": fields}
+        )
+
+    def count_missions(self) -> int:
+        return self._db.missions.count_documents({})
+
     def close(self):
         self._client.close()
 

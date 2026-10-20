@@ -447,3 +447,67 @@ MATCH (r:Road {id:'R22'}) SET r.path=[36.823,10.245, 36.818,10.252];
 MATCH (r:Road {id:'R24'}) SET r.path=[36.752,10.228, 36.754,10.233];
 MATCH (r:Road {id:'R28'}) SET r.path=[36.806,10.246, 36.802,10.251];
 MATCH (r:Road {id:'R29'}) SET r.path=[36.750,10.218, 36.748,10.224];
+
+// ============================================================
+// RESEAU ROUTIER v5 - RELATIONS CONNECTS_TO (routage)
+// Artere-artere + quartier-quartier, construites sur la vraie
+// geometrie des traces GPS. Dernier sommet/exposition:
+// flood_susceptibility = celle de la route ARRIvEE (exposee).
+// Le statut n'est PAS stocke sur l'arete (il change avec les
+// incidents) : le moteur de routage lit Road.status en direct.
+// ============================================================
+
+UNWIND [
+ ['R1','R4', 2.5, 4, 1], ['R1','R9', 3.0, 5, 2], ['R2','R3', 1.4, 3, 2],
+ ['R4','R12', 1.8, 3, 2], ['R4','R13', 1.5, 3, 2], ['R4','R20', 2.2, 4, 2],
+ ['R3','R8', 1.2, 3, 2], ['R3','R7', 1.6, 3, 2], ['R3','R27', 1.9, 4, 2],
+ ['R5','R18', 2.0, 4, 2], ['R5','R28', 1.6, 3, 2], ['R5','R22', 1.4, 3, 2],
+ ['R5','R19', 2.6, 5, 2],
+ ['R2','R6', 0.7, 2, 3], ['R2','R7', 1.0, 2, 3], ['R2','R21', 1.2, 3, 2],
+ ['R2','R23', 1.0, 2, 3], ['R2','R8', 1.8, 4, 2], ['R2','R16', 1.6, 4, 3],
+ ['R6','R23', 0.6, 2, 3], ['R6','R21', 0.8, 2, 3], ['R6','R7', 1.1, 3, 2],
+ ['R7','R8', 0.9, 2, 2], ['R25','R30', 1.2, 3, 2], ['R27','R30', 0.8, 2, 2],
+ ['R21','R25', 0.7, 2, 2], ['R30','R8', 1.1, 2, 2], ['R27','R8', 1.0, 2, 2],
+ ['R9','R10', 1.5, 3, 2], ['R9','R11', 1.2, 3, 2], ['R10','R26', 1.3, 3, 2],
+ ['R12','R13', 1.2, 3, 2], ['R13','R14', 2.8, 5, 2], ['R14','R20', 1.2, 3, 2],
+ ['R15','R16', 1.3, 3, 2], ['R16','R19', 1.1, 3, 3], ['R15','R18', 1.4, 3, 2],
+ ['R17','R29', 0.9, 2, 2], ['R29','R24', 1.6, 3, 2], ['R22','R28', 1.9, 4, 2]
+] AS segment
+MATCH (a:Road {id: segment[0]}), (b:Road {id: segment[1]})
+MERGE (a)-[e1:CONNECTS_TO]->(b)
+MERGE (b)-[e2:CONNECTS_TO]->(a)
+SET e1.distance_km = segment[2], e1.travel_time_min = segment[3],
+    e1.traffic_level = segment[4],
+    e1.flood_susceptibility = coalesce(b.flood_susceptibility, 2),
+    e2.distance_km = segment[2], e2.travel_time_min = segment[3],
+    e2.traffic_level = segment[4],
+    e2.flood_susceptibility = coalesce(a.flood_susceptibility, 2);
+
+// --- v5.1 : ECHANGEURS INTER-COMPQSANTES (connectivite reseau) ---
+UNWIND [
+ ['R3','R4', 2.2, 4, 2], ['R1','R5', 3.4, 5, 1], ['R22','R14', 2.0, 4, 2],
+ ['R5','R2', 2.8, 4, 2], ['R4','R1', 2.0, 4, 1], ['R3','R5', 3.8, 6, 2]
+] AS segment
+MATCH (a:Road {id: segment[0]}), (b:Road {id: segment[1]})
+MERGE (a)-[e1:CONNECTS_TO]->(b)
+MERGE (b)-[e2:CONNECTS_TO]->(a)
+SET e1.distance_km = segment[2], e1.travel_time_min = segment[3],
+    e1.traffic_level = segment[4],
+    e1.flood_susceptibility = coalesce(b.flood_susceptibility, 2),
+    e2.distance_km = segment[2], e2.travel_time_min = segment[3],
+    e2.traffic_level = segment[4],
+    e2.flood_susceptibility = coalesce(a.flood_susceptibility, 2);
+
+// --- v5.2 : AJUSTEMENT BEN AROUS (exits R24/R29/R17) ---
+UNWIND [
+ ['R24','R5', 3.0, 6, 2], ['R29','R5', 2.8, 5, 2]
+] AS segment
+MATCH (a:Road {id: segment[0]}), (b:Road {id: segment[1]})
+MERGE (a)-[e1:CONNECTS_TO]->(b)
+MERGE (b)-[e2:CONNECTS_TO]->(a)
+SET e1.distance_km = segment[2], e1.travel_time_min = segment[3],
+    e1.traffic_level = segment[4],
+    e1.flood_susceptibility = coalesce(b.flood_susceptibility, 2),
+    e2.distance_km = segment[2], e2.travel_time_min = segment[3],
+    e2.traffic_level = segment[4],
+    e2.flood_susceptibility = coalesce(a.flood_susceptibility, 2);

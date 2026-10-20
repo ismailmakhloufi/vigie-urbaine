@@ -43,3 +43,14 @@ export const aiAsk = (question) =>
 
 export const aiBriefing = () =>
   apiFetch("/ai/briefing", { method: "POST" });
+
+export const postRouting = (body) =>
+  apiFetch("/routing", { method: "POST", body: JSON.stringify(body) });
+
+export const getMissions = () => apiFetch("/missions");
+
+export const postMission = (body) =>
+  apiFetch("/missions", { method: "POST", body: JSON.stringify(body) });
+
+export const cancelMission = (missionId) =>
+  apiFetch(`/missions/${missionId}/cancel`, { method: "POST" });
