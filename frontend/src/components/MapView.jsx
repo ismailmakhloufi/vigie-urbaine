@@ -196,11 +196,12 @@ export default function MapView({
       }
 
       const marker = L.circleMarker([node.lat, node.lon], {
-        radius: taille,
+        radius: taille + 4,
         color: couleur,
-        weight: 2,
+        weight: 1.6,
+        opacity: 0.85,
         fillColor: couleur,
-        fillOpacity: 0.68,
+        fillOpacity: 0.1,
       })
         .addTo(couche.current)
         .bindPopup(
