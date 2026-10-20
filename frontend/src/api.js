@@ -31,3 +31,6 @@ export const resolveEvent = (id) =>
 
 export const getEventImpact = (id) =>
   apiFetch(`/events/${id}/impact`);
+
+export const getEventRecommendations = (id) =>
+  apiFetch(`/events/${id}/recommendations`);

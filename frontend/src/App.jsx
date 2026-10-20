@@ -5,6 +5,7 @@ import {
   getRisk,
   getEvents,
   getEventImpact,
+  getEventRecommendations,
   postEvent,
   postWhatif,
   resolveEvent,
@@ -69,6 +70,7 @@ export default function App() {
   const [erreur, setErreur] = useState(null);
   const [risqueSelectionne, setRisqueSelectionne] = useState(null);
   const [cascade, setCascade] = useState(null);
+  const [plan, setPlan] = useState(null);
 
   const refresh = async () => {
     try {
@@ -152,12 +154,15 @@ export default function App() {
     );
     if (!incident) {
       setCascade(null);
+      setPlan(null);
       return;
     }
     try {
       setCascade(await getEventImpact(incident.event_id));
+      setPlan(await getEventRecommendations(incident.event_id));
     } catch {
       setCascade(null);
+      setPlan(null);
     }
   };
 
@@ -374,6 +379,7 @@ export default function App() {
           vaguesCascades={vagues}
           fantomes={fantomes}
           riskById={riskById}
+          itineraires={plan?.detours || []}
         />
         {toast && <div className="toast">{toast}</div>}
       </main>
@@ -428,6 +434,47 @@ export default function App() {
                   </div>
                 )}
               </>
+            )}
+            {plan && (
+              <section className="action-plan">
+                <div className="section-titre" style={{ marginTop: 10 }}>
+                  📞 Plan d'action
+                </div>
+                <div className="plan-contacts">
+                  {plan.contacts.map((contact) => (
+                    <span className="plan-contact" key={contact}>📞 {contact}</span>
+                  ))}
+                </div>
+                <ul className="plan-actions">
+                  {plan.actions.map((action) => (
+                    <li key={action}>▸ {action}</li>
+                  ))}
+                </ul>
+                {(plan.alternatives || []).length > 0 && (
+                  <>
+                    <div className="section-titre">Alternatives de secours</div>
+                    {plan.alternatives.map((alt) => (
+                      <div className="plan-alt" key={alt.id}>
+                        <b>{alt.id}</b> {alt.name}
+                        <small>{alt.note}</small>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {(plan.detours || []).length > 0 && (
+                  <>
+                    <div className="section-titre">Itinéraires alternatifs (cyan)</div>
+                    {plan.detours.map((detour) => (
+                      <div className="plan-alt" key={detour.dest_id}>
+                        <b>→ {detour.dest_id}</b> {detour.dest_name}
+                        <small>
+                          via {detour.via_names.join(" › ")} ({detour.jumps} saut(s))
+                        </small>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </section>
             )}
           </section>
         ) : (

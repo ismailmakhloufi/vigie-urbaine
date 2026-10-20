@@ -44,6 +44,7 @@ export default function MapView({
   vaguesCascades,
   fantomes,
   riskById = {},
+  itineraires = [],
 }) {
   const carte = useRef(null);
   const couche = useRef(null);
@@ -77,6 +78,35 @@ export default function MapView({
 
     couche.current.clearLayers();
     markers.current = {};
+
+    for (const itineraire of itineraires) {
+      if (!itineraire.coords || itineraire.coords.length < 2) continue;
+      const latlngs = itineraire.coords.map(([lat, lon]) => [lat, lon]);
+
+      L.polyline(latlngs, {
+        color: "#67e8f9",
+        weight: 10,
+        opacity: 0.16,
+        lineCap: "round",
+      }).addTo(couche.current);
+
+      const trait = L.polyline(latlngs, {
+        color: "#67e8f9",
+        weight: 3.5,
+        opacity: 0.95,
+        dashArray: "9 6",
+        lineCap: "round",
+      })
+        .addTo(couche.current)
+        .bindPopup(
+          `<div class="map-popup">` +
+            `<b>🧭 Itinéraire alternatif optimal</b><br>` +
+            `vers ${itineraire.dest_id} · ${itineraire.dest_name}<br>` +
+            `via ${itineraire.via_names?.join(" › ") || "…"} ` +
+            `(${itineraire.jumps} saut(s))` +
+          `</div>`
+        );
+    }
 
     for (const node of infra) {
       if (node.lat == null || node.lon == null) continue;
@@ -243,7 +273,7 @@ export default function MapView({
 
       marker.on("click", () => onSelection(node));
     }
-  }, [infra, cibleId, fantomes, riskById, onSelection]);
+  }, [infra, cibleId, fantomes, riskById, onSelection, itineraires]);
 
   useEffect(() => {
     if (!vaguesCascades?.length) return;

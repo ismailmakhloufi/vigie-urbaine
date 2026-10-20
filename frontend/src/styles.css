@@ -319,6 +319,26 @@ button { font: inherit; }
   box-shadow:0 0 7px currentColor;
 }
 .ub-pin.route-pin .etiquette { margin-top:2px; padding:0 4px; font-size:7px; }
+
+.action-plan {
+  margin-top:10px; padding:10px;
+  background:rgba(10,18,32,.6); border:1px solid rgba(103,232,249,.25);
+  border-radius:10px;
+}
+.plan-contacts { display:flex; flex-wrap:wrap; gap:5px; margin:8px 0; }
+.plan-contact {
+  font-size:9.5px; padding:3px 7px; border-radius:20px;
+  border:1px solid rgba(103,232,249,.4); color:var(--cyan);
+  background:rgba(10,20,30,.7); white-space:nowrap;
+}
+.plan-actions { margin:6px 0 2px; padding-left:14px; font-size:11px; line-height:1.7; color:var(--ink); }
+.plan-alt {
+  font-size:11px; margin:6px 0; padding:6px 8px;
+  border-left:2.5px solid var(--cyan); background:rgba(10,20,32,.6);
+  border-radius:0 8px 8px 0;
+}
+.plan-alt b { color:var(--cyan); font-family:var(--font-mono); margin-right:6px; }
+.plan-alt small { display:block; margin-top:2px; color:var(--ink-dim); font-size:9.5px; }
 .onde {
   position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
   border:2.5px solid currentColor; border-radius:50%;

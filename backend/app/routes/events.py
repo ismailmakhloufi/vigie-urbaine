@@ -20,6 +20,7 @@ from app.db.neo4j_client import neo4j_client
 from app.models.event import EventCreate
 from app.models.impact import ImpactSummary
 from app.services.cascade import compute_impact
+from app.services.recommendations import build_recommendations
 
 
 router = APIRouter(prefix="/events", tags=["Events"])
@@ -151,6 +152,18 @@ def event_impact(event_id: str):
     """
     try:
         return compute_impact(event_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.get("/{event_id}/recommendations")
+def event_recommendations(event_id: str):
+    """
+    Plan d'action opérationnel pour un incident actif :
+    contacts, actions, itineraires alternatifs optimaux et
+    infrastructures de secours (antenne / poste)."""
+    try:
+        return build_recommendations(event_id)
     except LookupError as exc:
         raise HTTPException(404, str(exc))
 
