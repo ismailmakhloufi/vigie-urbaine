@@ -105,13 +105,13 @@ export default function App() {
   }, [toast]);
 
   useEffect(() => {
-    if (!fantomes.length) return;
+    if (prediction == null && fantomes.length === 0) return;
     const t = setTimeout(() => {
       setFantomes([]);
       setPrediction(null);
     }, 15000);
     return () => clearTimeout(t);
-  }, [fantomes]);
+  }, [fantomes, prediction]);
 
   const nodesAtRisk = useMemo(
     () => [...(risque?.nodes_at_risk || [])].sort((a, b) => b.score - a.score),
