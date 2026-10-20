@@ -12,12 +12,12 @@ const COULEURS_STATUT = {
 };
 
 const TAILLES = {
-  Hospital: 20,
-  PowerStation: 18,
-  TelecomTower: 15,
-  Warehouse: 16,
-  Pharmacy: 13,
-  Road: 11,
+  Hospital: 16,
+  PowerStation: 14,
+  TelecomTower: 12,
+  Warehouse: 13,
+  Pharmacy: 10,
+  Road: 8,
   Zone: null,
 };
 
@@ -30,19 +30,12 @@ const EMOJIS_NATURE = {
   Road: "🛣️",
 };
 
-function iconePin(couleur, statut, critique, selectionne, fantome) {
-  const classes = ["ub-pin"];
-  if (selectionne) classes.push("selected");
-  if (fantome) classes.push("fantome");
-  if (critique && statut !== "ONLINE") classes.push("critique-neon");
-  return L.divIcon({
-    className: "",
-    iconSize: [30, 30],
-    html: `<div class="${classes.join(" ")}" style="color:${couleur}">
-             <div class="coeur"></div>
-           </div>`,
-  });
-}
+const RISK_COLORS = {
+  LOW: "#22d3ee",
+  MEDIUM: "#facc15",
+  HIGH: "#f59e0b",
+  CRITICAL: "#f43f5e",
+};
 
 export default function MapView({
   infra,
@@ -50,6 +43,7 @@ export default function MapView({
   onSelection,
   vaguesCascades,
   fantomes,
+  riskById = {},
 }) {
   const carte = useRef(null);
   const couche = useRef(null);
@@ -57,69 +51,97 @@ export default function MapView({
 
   useEffect(() => {
     if (carte.current) return;
-    carte.current = L.map("carte", { center: [36.825, 10.175], zoom: 13 });
+
+    carte.current = L.map("carte", {
+      center: [36.825, 10.175],
+      zoom: 13,
+      zoomControl: true,
+    });
+
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: "© OpenStreetMap",
     }).addTo(carte.current);
+
     couche.current = L.layerGroup().addTo(carte.current);
-    setTimeout(() => carte.current.invalidateSize(), 200);
-    window.addEventListener("resize", () => carte.current.invalidateSize());
+
+    const resize = () => carte.current?.invalidateSize();
+    setTimeout(resize, 150);
+    window.addEventListener("resize", resize);
+
+    return () => window.removeEventListener("resize", resize);
   }, []);
 
   useEffect(() => {
     if (!couche.current) return;
+
     couche.current.clearLayers();
     markers.current = {};
 
     for (const node of infra) {
+      if (node.lat == null || node.lon == null) continue;
+
+      const risk = riskById[node.id];
+
       if (node.kind === "Zone") {
+        const zoneRisk = risk ? RISK_COLORS[risk.risk] : "#22d3ee";
         const zone = L.circle([node.lat, node.lon], {
-          radius: 1600,
-          color: "#22d3ee",
-          weight: 1,
-          dashArray: "6 6",
-          fillColor: "#22d3ee",
-          fillOpacity: 0.05,
+          radius: 1450,
+          color: zoneRisk,
+          weight: risk ? 2 : 1,
+          dashArray: "7 7",
+          fillColor: zoneRisk,
+          fillOpacity: risk ? 0.08 : 0.035,
         })
           .addTo(couche.current)
           .bindPopup(
-            `<b>Zone ${node.name}</b><br>Ciblée par la pluie extrême 🌧` +
-              (node.status && node.status !== "ONLINE" ? `<br>ALERTE MÉTÉO ACTIVE` : "")
+            `<b>${node.name}</b><br>Zone météo` +
+              (risk ? `<br><b>Risque ${risk.risk} : ${risk.score}/100</b>` : "")
           );
-        const el = zone.getElement();
-        if (el) {
-          const pin = document.createElement("div");
-          pin.style = "position:relative;z-index:2;display:inline-block;display:none;";
-          el.appendChild(pin);
-          markers.current[node.id] = { marker: zone, el, pin };
-        }
+
         zone.on("click", () => onSelection(node));
+        markers.current[node.id] = { marker: zone, el: zone.getElement(), pin: null };
         continue;
       }
 
       const couleur = COULEURS_STATUT[node.status] || COULEURS_STATUT.UNKNOWN;
-      const taille = TAILLES[node.kind] || 10;
-      const critique = node.criticality >= 4;
+      const taille = TAILLES[node.kind] || 9;
+      const riskColor = risk ? RISK_COLORS[risk.risk] : null;
+
+      if (risk && risk.score >= 30) {
+        L.circleMarker([node.lat, node.lon], {
+          radius: taille + 7,
+          color: riskColor,
+          weight: risk.risk === "CRITICAL" ? 3 : 2,
+          fillColor: riskColor,
+          fillOpacity: 0.08,
+          opacity: 0.9,
+          className: risk.risk === "CRITICAL" ? "risk-map-pulse" : "",
+        }).addTo(couche.current);
+      }
+
       const marker = L.circleMarker([node.lat, node.lon], {
         radius: taille,
         color: couleur,
         weight: 2,
         fillColor: couleur,
-        fillOpacity: 0.55,
+        fillOpacity: 0.68,
       })
         .addTo(couche.current)
         .bindPopup(
-          `<b>${node.name}</b><br>` +
-            `Type : ${node.kind}<br>` +
-            `Statut : ${node.status}<br>` +
-            (node.criticality ? `Criticité : ${node.criticality}/5<br>` : "") +
-            (node.backup_power_hours !== undefined
-              ? `Gén. secours : ${node.backup_power_hours} h<br>`
+          `<div class="map-popup">` +
+            `<b>${EMOJIS_NATURE[node.kind] || "📍"} ${node.name}</b><br>` +
+            `<span>${node.kind} · ${node.id}</span><br>` +
+            `Statut : <b>${node.status || "UNKNOWN"}</b><br>` +
+            (risk
+              ? `Risque : <b style="color:${riskColor}">${risk.risk} · ${risk.score}/100</b><br>`
+              : "Risque : LOW / non exposé<br>") +
+            (node.criticality != null ? `Criticité : ${node.criticality}/5<br>` : "") +
+            (node.backup_power_hours != null
+              ? `Secours : ${node.backup_power_hours} h<br>`
               : "") +
-            (node.stock_days !== undefined
-              ? `Stock médicaments : ${node.stock_days} j`
-              : "")
+            (node.stock_days != null ? `Stock : ${node.stock_days} j` : "") +
+          `</div>`
         );
 
       const el = marker.getElement();
@@ -128,70 +150,72 @@ export default function MapView({
         pin.className =
           "ub-pin" +
           (node.id === cibleId ? " selected" : "") +
-          (critique && node.status !== "ONLINE" ? " critique-neon" : "");
+          (fantomes.includes(node.id) ? " fantome" : "");
+
         pin.style =
           `position:absolute;width:24px;height:24px;` +
           `color:${couleur};transform:translate(-50%,-50%);z-index:2;`;
+
         pin.innerHTML =
           `<div class="coeur"></div>` +
           `<div class="symbole">${EMOJIS_NATURE[node.kind] || "📍"}</div>` +
           `<div class="etiquette">${node.id}</div>`;
+
         el.appendChild(pin);
         markers.current[node.id] = { marker, el, pin };
       }
+
       marker.on("click", () => onSelection(node));
     }
-  }, [infra, cibleId]);
+  }, [infra, cibleId, fantomes, riskById, onSelection]);
 
   useEffect(() => {
-    if (!vaguesCascades || vaguesCascades.length === 0) return;
+    if (!vaguesCascades?.length) return;
+
     const timers = [];
+
     for (const { id, depth, score } of vaguesCascades) {
       timers.push(
-        setTimeout(
-          () => {
-            const entry = markers.current[id];
-            if (!entry) return;
-            const couleur =
-              score >= 70 ? "#f43f5e" : score >= 50 ? "#fbbf24" : "#22d3ee";
-            const onde = document.createElement("div");
-            onde.className = "onde";
-            onde.style.color = couleur;
-            entry.el.appendChild(onde);
-            timers.push(
-              setTimeout(() => onde.remove(), 1700)
-            );
-          },
-          250 + depth * 900
-        )
+        setTimeout(() => {
+          const entry = markers.current[id];
+          if (!entry?.el) return;
+
+          const couleur =
+            score >= 70 ? "#f43f5e" : score >= 50 ? "#f59e0b" : "#22d3ee";
+
+          const onde = document.createElement("div");
+          onde.className = "onde";
+          onde.style.color = couleur;
+          entry.el.appendChild(onde);
+
+          timers.push(setTimeout(() => onde.remove(), 1700));
+        }, 250 + depth * 850)
       );
     }
+
     return () => timers.forEach(clearTimeout);
   }, [vaguesCascades]);
-
-  useEffect(() => {
-    for (const [id, entry] of Object.entries(markers.current)) {
-      if (entry.pin) entry.pin.classList.toggle("fantome", fantomes.includes(id));
-    }
-  }, [fantomes, infra]);
 
   return (
     <>
       <div id="carte" />
+      <div className="map-overlay-title">
+        <small>LIVE DIGITAL TWIN</small>
+        <b>Grand Tunis</b>
+      </div>
+
       <div className="legende">
-        <div className="legende-titre">Natures</div>
-        <span>🏥 Hôpital</span>
-        <span>⚡ Poste électrique</span>
-        <span>📡 Antenne telecom</span>
-        <span>📦 Dépôt logistique</span>
-        <span>💊 Pharmacie</span>
-        <span>🛣️ Route</span>
-        <div className="legende-titre" style={{ marginTop: 6 }}>Statuts (halo)</div>
-        <span><i className="puce" style={{ background: "#34d399" }} /> Opérationnel</span>
-        <span><i className="puce" style={{ background: "#fbbf24" }} /> Route bloquée</span>
-        <span><i className="puce" style={{ background: "#f43f5e" }} /> Hors service</span>
-        <span><i className="puce" style={{ background: "#f472b6" }} /> Compromis (cyber)</span>
-        <span><i className="puce" style={{ border: "2px dashed #a78bfa", background: "transparent" }} /> Prédiction What-if</span>
+        <div className="legende-titre">Risque calculé</div>
+        <span><i className="puce risk-low-dot" /> LOW</span>
+        <span><i className="puce risk-medium-dot" /> MEDIUM</span>
+        <span><i className="puce risk-high-dot" /> HIGH</span>
+        <span><i className="puce risk-critical-dot" /> CRITICAL</span>
+
+        <div className="legende-titre legend-gap">Statut opérationnel</div>
+        <span><i className="puce status-ok-dot" /> Opérationnel</span>
+        <span><i className="puce status-down-dot" /> Hors service</span>
+        <span><i className="puce status-cyber-dot" /> Compromis</span>
+        <span><i className="puce whatif-dot" /> What-if</span>
       </div>
     </>
   );

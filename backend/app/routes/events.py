@@ -1,3 +1,16 @@
+"""
+Urban Butterfly - Events Router v1.1
+
+Améliorations principales :
+- mémorise le statut précédent de l'infrastructure avant modification ;
+- restaure exactement ce statut lors de la résolution ;
+- conserve le mécanisme last_event pour éviter qu'un ancien incident
+  ne restaure un statut alors qu'un incident plus récent est actif ;
+- ajoute explicitement status="ACTIVE" dans MongoDB ;
+- conserve le stockage hybride MongoDB + Neo4j ;
+- recalcule l'impact après création de l'événement.
+"""
+
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
@@ -8,48 +21,95 @@ from app.models.event import EventCreate
 from app.models.impact import ImpactSummary
 from app.services.cascade import compute_impact
 
+
 router = APIRouter(prefix="/events", tags=["Events"])
+
 
 STATUS_BY_EVENT_TYPE = {
     "POWER_FAILURE": "OFFLINE",
     "CYBER_ATTACK": "COMPROMISED",
     "ROAD_BLOCKED": "BLOCKED",
-}
-
-RESTORE_BY_EVENT_TYPE = {
-    "POWER_FAILURE": "ONLINE",
-    "CYBER_ATTACK": "ONLINE",
-    "ROAD_BLOCKED": "CLEAR",
+    # HEAVY_RAIN cible une zone : on ne force pas son statut ici.
 }
 
 
 @router.post("", status_code=201)
 def create_event(event: EventCreate):
+    """
+    Crée un événement réel.
+
+    Étapes :
+    1. Vérifie que la cible existe dans Neo4j.
+    2. Sauvegarde son statut actuel.
+    3. Insère l'événement dans MongoDB.
+    4. Met à jour le statut de la cible si nécessaire.
+    5. Crée le nœud Event dans Neo4j.
+    6. Crée (Event)-[:AFFECTS]->(Infrastructure).
+    7. Calcule immédiatement l'impact.
+    """
+
     target = neo4j_client.query(
-        "MATCH (t:Infrastructure {id: $target_id}) RETURN t.id AS id, t.kind AS kind",
+        """
+        MATCH (t:Infrastructure {id: $target_id})
+        RETURN
+            t.id AS id,
+            t.kind AS kind,
+            t.name AS name,
+            t.status AS status
+        """,
         {"target_id": event.target_id},
     )
-    if not target:
-        raise HTTPException(404, f"target '{event.target_id}' not found in the graph")
 
+    if not target:
+        raise HTTPException(
+            404,
+            f"target '{event.target_id}' not found in the graph",
+        )
+
+    target_data = target[0]
+
+    # Document complet stocké dans MongoDB
     doc = event.model_dump()
     doc["timestamp"] = datetime.now(timezone.utc)
+    doc["status"] = "ACTIVE"
+    doc["previous_status"] = target_data.get("status")
 
     mongo_result = mongo_client.insert_event(doc)
     event_id = str(mongo_result.inserted_id)
 
+    # Mise à jour éventuelle de l'état courant de l'infrastructure.
     new_status = STATUS_BY_EVENT_TYPE.get(event.type)
+
     if new_status:
         neo4j_client.query(
-            "MATCH (t:Infrastructure {id: $target_id}) "
-            "SET t.status = $status, t.last_event = $event_id",
-            {"target_id": event.target_id, "status": new_status, "event_id": event_id},
+            """
+            MATCH (t:Infrastructure {id: $target_id})
+            SET
+                t.status = $status,
+                t.last_event = $event_id
+            """,
+            {
+                "target_id": event.target_id,
+                "status": new_status,
+                "event_id": event_id,
+            },
         )
 
+    # Représentation de l'événement dans Neo4j
     neo4j_client.query(
-        "CREATE (e:Event {id: $event_id, type: $type, severity: $severity, timestamp: $ts}) "
-        "WITH e MATCH (t:Infrastructure {id: $target_id}) "
-        "MERGE (e)-[:AFFECTS]->(t)",
+        """
+        CREATE (
+            e:Event {
+                id: $event_id,
+                type: $type,
+                severity: $severity,
+                timestamp: $ts
+            }
+        )
+        WITH e
+        MATCH (t:Infrastructure {id: $target_id})
+        MERGE (e)-[:AFFECTS]->(t)
+        """,
         {
             "event_id": event_id,
             "type": event.type,
@@ -60,16 +120,35 @@ def create_event(event: EventCreate):
     )
 
     impact = compute_impact(event_id)
-    return {"id": event_id, "stored_in": ["mongodb", "neo4j"], "impact": impact}
+
+    return {
+        "id": event_id,
+        "status": "ACTIVE",
+        "stored_in": ["mongodb", "neo4j"],
+        "target": {
+            "id": target_data["id"],
+            "kind": target_data.get("kind"),
+            "name": target_data.get("name"),
+            "previous_status": target_data.get("status"),
+            "current_status": new_status or target_data.get("status"),
+        },
+        "impact": impact,
+    }
 
 
 @router.get("")
 def list_events(limit: int = 50):
+    """
+    Retourne les événements les plus récents.
+    """
     return mongo_client.list_events(limit)
 
 
 @router.get("/{event_id}/impact", response_model=ImpactSummary)
 def event_impact(event_id: str):
+    """
+    Recalcule l'impact d'un événement existant.
+    """
     try:
         return compute_impact(event_id)
     except LookupError as exc:
@@ -78,18 +157,63 @@ def event_impact(event_id: str):
 
 @router.post("/{event_id}/resolve")
 def resolve_event(event_id: str):
+    """
+    Résout un événement.
+
+    Le statut précédent enregistré dans MongoDB est restauré uniquement si :
+    - l'événement existe ;
+    - il est encore actif ;
+    - il est toujours le dernier événement ayant modifié cette infrastructure.
+
+    Cela évite qu'un ancien incident remette une infrastructure en état normal
+    alors qu'un événement plus récent l'affecte encore.
+    """
+
     event = mongo_client.get_event(event_id)
+
     if not event:
-        raise HTTPException(404, f"event '{event_id}' not found in MongoDB")
-
-    restore = RESTORE_BY_EVENT_TYPE.get(event.get("type"))
-
-    if restore:
-        neo4j_client.query(
-            "MATCH (t:Infrastructure {id: $target_id}) WHERE t.last_event = $event_id "
-            "SET t.status = $status REMOVE t.last_event",
-            {"target_id": event["target_id"], "status": restore, "event_id": event_id},
+        raise HTTPException(
+            404,
+            f"event '{event_id}' not found in MongoDB",
         )
 
+    if event.get("status") == "RESOLVED":
+        return {
+            "id": event_id,
+            "status": "RESOLVED",
+            "message": "event already resolved",
+        }
+
+    previous_status = event.get("previous_status")
+    restored = False
+
+    if previous_status is not None:
+        result = neo4j_client.query(
+            """
+            MATCH (t:Infrastructure {id: $target_id})
+            WHERE t.last_event = $event_id
+            SET t.status = $previous_status
+            REMOVE t.last_event
+            RETURN
+                t.id AS id,
+                t.status AS status
+            """,
+            {
+                "target_id": event["target_id"],
+                "event_id": event_id,
+                "previous_status": previous_status,
+            },
+        )
+
+        restored = bool(result)
+
     mongo_client.set_event_status(event_id, "RESOLVED")
-    return {"id": event_id, "status": "RESOLVED", "restored": restore}
+
+    return {
+        "id": event_id,
+        "status": "RESOLVED",
+        "target_id": event.get("target_id"),
+        "previous_status": previous_status,
+        "restored": restored,
+    }
+

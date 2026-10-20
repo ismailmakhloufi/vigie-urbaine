@@ -4,6 +4,14 @@
 //               - 8 pharmacies - 3 depots
 // Idempotent : rejouer ne duplique rien (MERGE + IF NOT EXISTS)
 // ============================================================
+// IMPORTANT :
+// Ce graphe représente un prototype de mini-jumeau numérique du Grand Tunis.
+// Les noms/zones servent de repères géographiques, mais les dépendances
+// électriques, télécom, logistiques, niveaux de criticité, stocks et secours
+// sont des données SYNTHÉTIQUES conçues pour la simulation académique.
+// Elles ne décrivent pas l'architecture opérationnelle réelle de Tunis.
+// ============================================================
+
 
 CREATE CONSTRAINT infra_id IF NOT EXISTS
 FOR (n:Infrastructure) REQUIRE n.id IS UNIQUE;
@@ -216,3 +224,179 @@ UNWIND [
 ] AS paire
 MATCH (n:Road:Infrastructure {id: paire[0]}), (z:Zone {id: paire[1]})
 MERGE (n)-[:LOCATED_IN]->(z);
+
+// ============================================================
+// ENRICHISSEMENT v3 - CASCADES MULTI-DOMAINES
+// Données synthétiques pour les scénarios Urban Butterfly.
+// ============================================================
+
+// ------------------------------------------------------------
+// 1) PROPRIETES TELECOM : criticité + autonomie de secours
+// ------------------------------------------------------------
+MATCH (t:TelecomTower {id:'T1'})  SET t.criticality=5, t.backup_power_hours=1;
+MATCH (t:TelecomTower {id:'T2'})  SET t.criticality=4, t.backup_power_hours=3;
+MATCH (t:TelecomTower {id:'T3'})  SET t.criticality=5, t.backup_power_hours=2;
+MATCH (t:TelecomTower {id:'T4'})  SET t.criticality=4, t.backup_power_hours=1;
+MATCH (t:TelecomTower {id:'T5'})  SET t.criticality=4, t.backup_power_hours=4;
+MATCH (t:TelecomTower {id:'T6'})  SET t.criticality=4, t.backup_power_hours=2;
+MATCH (t:TelecomTower {id:'T7'})  SET t.criticality=5, t.backup_power_hours=3;
+MATCH (t:TelecomTower {id:'T8'})  SET t.criticality=3, t.backup_power_hours=2;
+MATCH (t:TelecomTower {id:'T9'})  SET t.criticality=4, t.backup_power_hours=1;
+MATCH (t:TelecomTower {id:'T10'}) SET t.criticality=4, t.backup_power_hours=4;
+
+// ------------------------------------------------------------
+// 2) CRITICITE DES DEPOTS + STOCKS OPERATIONNELS
+// ------------------------------------------------------------
+MATCH (w:Warehouse {id:'W1'}) SET w.criticality=5, w.logistics_priority='CRITICAL';
+MATCH (w:Warehouse {id:'W2'}) SET w.criticality=4, w.logistics_priority='HIGH';
+MATCH (w:Warehouse {id:'W3'}) SET w.criticality=4, w.logistics_priority='HIGH';
+
+// ------------------------------------------------------------
+// 3) STOCKS SYNTHETIQUES DES PHARMACIES
+// ------------------------------------------------------------
+MATCH (p:Pharmacy {id:'PH1'}) SET p.medicine_stock_days=2;
+MATCH (p:Pharmacy {id:'PH2'}) SET p.medicine_stock_days=3;
+MATCH (p:Pharmacy {id:'PH3'}) SET p.medicine_stock_days=4;
+MATCH (p:Pharmacy {id:'PH4'}) SET p.medicine_stock_days=2;
+MATCH (p:Pharmacy {id:'PH5'}) SET p.medicine_stock_days=3;
+MATCH (p:Pharmacy {id:'PH6'}) SET p.medicine_stock_days=2;
+MATCH (p:Pharmacy {id:'PH7'}) SET p.medicine_stock_days=2;
+MATCH (p:Pharmacy {id:'PH8'}) SET p.medicine_stock_days=3;
+
+// ------------------------------------------------------------
+// 4) DEPENDANCES TELECOM DES HOPITAUX
+// Permet : CYBER_ATTACK/POWER_FAILURE -> antenne -> hôpital
+// ------------------------------------------------------------
+MATCH (h:Hospital {id:'H1'}), (t:TelecomTower {id:'T1'})
+MERGE (h)-[:DEPENDS_ON {reason:'communications urgences', domain:'TELECOM', synthetic:true}]->(t);
+
+MATCH (h:Hospital {id:'H2'}), (t:TelecomTower {id:'T7'})
+MERGE (h)-[:DEPENDS_ON {reason:'communications urgences', domain:'TELECOM', synthetic:true}]->(t);
+
+MATCH (h:Hospital {id:'H3'}), (t:TelecomTower {id:'T3'})
+MERGE (h)-[:DEPENDS_ON {reason:'communications urgences', domain:'TELECOM', synthetic:true}]->(t);
+
+MATCH (h:Hospital {id:'H4'}), (t:TelecomTower {id:'T4'})
+MERGE (h)-[:DEPENDS_ON {reason:'communications urgences', domain:'TELECOM', synthetic:true}]->(t);
+
+MATCH (h:Hospital {id:'H5'}), (t:TelecomTower {id:'T9'})
+MERGE (h)-[:DEPENDS_ON {reason:'communications urgences', domain:'TELECOM', synthetic:true}]->(t);
+
+// ------------------------------------------------------------
+// 5) DEPENDANCES TELECOM DES PHARMACIES
+// Rend les cyberattaques et pannes télécom plus visibles dans la cascade.
+// ------------------------------------------------------------
+MATCH (p:Pharmacy {id:'PH1'}), (t:TelecomTower {id:'T6'})
+MERGE (p)-[:DEPENDS_ON {reason:'réseau paiement/stock', domain:'TELECOM', synthetic:true}]->(t);
+
+MATCH (p:Pharmacy {id:'PH2'}), (t:TelecomTower {id:'T1'})
+MERGE (p)-[:DEPENDS_ON {reason:'réseau paiement/stock', domain:'TELECOM', synthetic:true}]->(t);
+
+MATCH (p:Pharmacy {id:'PH3'}), (t:TelecomTower {id:'T7'})
+MERGE (p)-[:DEPENDS_ON {reason:'réseau paiement/stock', domain:'TELECOM', synthetic:true}]->(t);
+
+MATCH (p:Pharmacy {id:'PH4'}), (t:TelecomTower {id:'T7'})
+MERGE (p)-[:DEPENDS_ON {reason:'réseau paiement/stock', domain:'TELECOM', synthetic:true}]->(t);
+
+MATCH (p:Pharmacy {id:'PH5'}), (t:TelecomTower {id:'T3'})
+MERGE (p)-[:DEPENDS_ON {reason:'réseau paiement/stock', domain:'TELECOM', synthetic:true}]->(t);
+
+MATCH (p:Pharmacy {id:'PH6'}), (t:TelecomTower {id:'T4'})
+MERGE (p)-[:DEPENDS_ON {reason:'réseau paiement/stock', domain:'TELECOM', synthetic:true}]->(t);
+
+MATCH (p:Pharmacy {id:'PH7'}), (t:TelecomTower {id:'T9'})
+MERGE (p)-[:DEPENDS_ON {reason:'réseau paiement/stock', domain:'TELECOM', synthetic:true}]->(t);
+
+MATCH (p:Pharmacy {id:'PH8'}), (t:TelecomTower {id:'T9'})
+MERGE (p)-[:DEPENDS_ON {reason:'réseau paiement/stock', domain:'TELECOM', synthetic:true}]->(t);
+
+// ------------------------------------------------------------
+// 6) DEPENDANCES TELECOM DES DEPOTS
+// ------------------------------------------------------------
+MATCH (w:Warehouse {id:'W1'}), (t:TelecomTower {id:'T6'})
+MERGE (w)-[:DEPENDS_ON {reason:'WMS / communications logistiques', domain:'TELECOM', synthetic:true}]->(t);
+
+MATCH (w:Warehouse {id:'W2'}), (t:TelecomTower {id:'T7'})
+MERGE (w)-[:DEPENDS_ON {reason:'WMS / communications logistiques', domain:'TELECOM', synthetic:true}]->(t);
+
+MATCH (w:Warehouse {id:'W3'}), (t:TelecomTower {id:'T3'})
+MERGE (w)-[:DEPENDS_ON {reason:'WMS / communications logistiques', domain:'TELECOM', synthetic:true}]->(t);
+
+// ------------------------------------------------------------
+// 7) DEPENDANCES ELECTRIQUES DES DEPOTS
+// ------------------------------------------------------------
+MATCH (w:Warehouse {id:'W1'}), (p:PowerStation {id:'P1'})
+MERGE (w)-[:DEPENDS_ON {reason:'chaîne du froid / alimentation', domain:'POWER', synthetic:true}]->(p);
+
+MATCH (w:Warehouse {id:'W2'}), (p:PowerStation {id:'P2'})
+MERGE (w)-[:DEPENDS_ON {reason:'chaîne du froid / alimentation', domain:'POWER', synthetic:true}]->(p);
+
+MATCH (w:Warehouse {id:'W3'}), (p:PowerStation {id:'P3'})
+MERGE (w)-[:DEPENDS_ON {reason:'chaîne du froid / alimentation', domain:'POWER', synthetic:true}]->(p);
+
+// ------------------------------------------------------------
+// 8) ENRICHISSEMENT DES ROUTES
+// Ces propriétés sont préparées pour une prochaine version du Risk Engine.
+// ------------------------------------------------------------
+MATCH (r:Road {id:'R1'})  SET r.criticality=5, r.traffic_importance=5, r.flood_susceptibility=2;
+MATCH (r:Road {id:'R2'})  SET r.criticality=5, r.traffic_importance=5, r.flood_susceptibility=3;
+MATCH (r:Road {id:'R3'})  SET r.criticality=4, r.traffic_importance=4, r.flood_susceptibility=4;
+MATCH (r:Road {id:'R4'})  SET r.criticality=4, r.traffic_importance=4, r.flood_susceptibility=2;
+MATCH (r:Road {id:'R5'})  SET r.criticality=5, r.traffic_importance=5, r.flood_susceptibility=4;
+
+UNWIND [
+ 'R6','R7','R8','R9','R10','R11','R12','R13','R14','R15',
+ 'R16','R17','R18','R19','R20','R21','R22','R23','R24','R25',
+ 'R26','R27','R28','R29','R30'
+] AS rid
+MATCH (r:Road {id:rid})
+SET
+  r.criticality = coalesce(r.criticality, 2),
+  r.traffic_importance = coalesce(r.traffic_importance, 2),
+  r.flood_susceptibility = coalesce(r.flood_susceptibility, 3);
+
+// Quelques axes plus sensibles pour les scénarios météo.
+MATCH (r:Road {id:'R7'})  SET r.flood_susceptibility=4;
+MATCH (r:Road {id:'R8'})  SET r.flood_susceptibility=5;
+MATCH (r:Road {id:'R12'}) SET r.flood_susceptibility=4;
+MATCH (r:Road {id:'R16'}) SET r.flood_susceptibility=5;
+MATCH (r:Road {id:'R17'}) SET r.flood_susceptibility=4;
+MATCH (r:Road {id:'R19'}) SET r.flood_susceptibility=5;
+
+// ------------------------------------------------------------
+// 9) MARQUAGE DES RELATIONS DE SIMULATION
+// On garde une trace explicite qu'il s'agit d'un modèle académique.
+// ------------------------------------------------------------
+MATCH ()-[rel:DEPENDS_ON]->()
+SET rel.model='Urban Butterfly', rel.simulation=true;
+
+MATCH ()-[rel:SUPPLIED_BY]->()
+SET rel.model='Urban Butterfly', rel.simulation=true;
+
+MATCH ()-[rel:CONNECTED_BY]->()
+SET rel.model='Urban Butterfly', rel.simulation=true;
+
+// ============================================================
+// REQUETES DE CONTROLE (à lancer séparément si besoin)
+// ============================================================
+// 1. Vérifier les cascades électriques / télécom :
+// MATCH p=(x:Infrastructure)-[:DEPENDS_ON*1..5]->(pwr:PowerStation {id:'P1'})
+// RETURN p;
+//
+// 2. Vérifier un scénario cyber sur T1 :
+// MATCH p=(x:Infrastructure)-[:DEPENDS_ON*1..5]->(t:TelecomTower {id:'T1'})
+// RETURN p;
+//
+// 3. Vérifier l'approvisionnement depuis W1 :
+// MATCH (s:Infrastructure)-[:SUPPLIED_BY]->(w:Warehouse {id:'W1'})
+// RETURN s,w;
+//
+// 4. Vérifier les infrastructures de Tunis Centre :
+// MATCH (i:Infrastructure)-[:LOCATED_IN]->(z:Zone {id:'Z1'})
+// RETURN i,z;
+//
+// 5. Vérifier les routes sensibles aux inondations :
+// MATCH (r:Road)
+// WHERE r.flood_susceptibility >= 4
+// RETURN r.id, r.name, r.flood_susceptibility
+// ORDER BY r.flood_susceptibility DESC;

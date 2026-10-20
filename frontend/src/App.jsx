@@ -16,7 +16,6 @@ const TYPES_INCIDENT = [
     classe: "btn-pluie",
     cibles: ["Zone"],
     severite: "HIGH",
-    indice: "viser une zone (Z1/Z2)",
   },
   {
     type: "POWER_FAILURE",
@@ -24,7 +23,6 @@ const TYPES_INCIDENT = [
     classe: "btn-panne",
     cibles: ["PowerStation"],
     severite: "CRITICAL",
-    indice: "viser un poste (P1/P2)",
   },
   {
     type: "ROAD_BLOCKED",
@@ -32,17 +30,29 @@ const TYPES_INCIDENT = [
     classe: "btn-route",
     cibles: ["Road"],
     severite: "HIGH",
-    indice: "viser une route (R1/R2/R3)",
   },
   {
     type: "CYBER_ATTACK",
-    label: "📡 Cyberattaque",
+    label: "🛡 Cyberattaque",
     classe: "btn-cyber",
-    cibles: ["Hospital", "PowerStation", "TelecomTower", "Warehouse"],
+    cibles: ["Hospital", "PowerStation", "TelecomTower", "Warehouse", "Pharmacy"],
     severite: "HIGH",
-    indice: "viser une infra non-routière",
   },
 ];
+
+const EMOJI_KIND = {
+  Hospital: "🏥",
+  PowerStation: "⚡",
+  TelecomTower: "📡",
+  Warehouse: "📦",
+  Pharmacy: "💊",
+  Road: "🛣️",
+  Zone: "🌐",
+};
+
+function RiskBadge({ risk }) {
+  return <span className={`risk-badge risk-${(risk || "LOW").toLowerCase()}`}>{risk || "LOW"}</span>;
+}
 
 export default function App() {
   const [infra, setInfra] = useState([]);
@@ -51,32 +61,40 @@ export default function App() {
   const [cible, setCible] = useState(null);
   const [modeSimulation, setModeSimulation] = useState(false);
   const [vagues, setVagues] = useState([]);
-  const [fantomes, setFantomes] = useState(null);
+  const [fantomes, setFantomes] = useState([]);
   const [prediction, setPrediction] = useState(null);
   const [toast, setToast] = useState(null);
   const [horloge, setHorloge] = useState("");
   const [erreur, setErreur] = useState(null);
+  const [risqueSelectionne, setRisqueSelectionne] = useState(null);
+
+  const refresh = async () => {
+    try {
+      const [infraData, riskData, eventsData] = await Promise.all([
+        getInfrastructure(),
+        getRisk(),
+        getEvents(20),
+      ]);
+      setInfra(infraData);
+      setRisque(riskData);
+      setHistorique(eventsData);
+      setErreur(null);
+    } catch (exc) {
+      setErreur(`Backend injoignable : ${exc.message}`);
+    }
+  };
 
   useEffect(() => {
-    const refresh = async () => {
-      try {
-        setInfra(await getInfrastructure());
-        setRisque(await getRisk());
-        setHistorique(await getEvents(12));
-      } catch (exc) {
-        setErreur(`Backend injoignable : ${exc.message}`);
-      }
-    };
     refresh();
     const timer = setInterval(refresh, 4000);
     return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    const t = setInterval(
-      () => setHorloge(new Date().toLocaleTimeString("fr-FR", { hour12: false })),
-      1000
-    );
+    const update = () =>
+      setHorloge(new Date().toLocaleTimeString("fr-FR", { hour12: false }));
+    update();
+    const t = setInterval(update, 1000);
     return () => clearInterval(t);
   }, []);
 
@@ -86,127 +104,162 @@ export default function App() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  useEffect(() => {
+    if (!fantomes.length) return;
+    const t = setTimeout(() => {
+      setFantomes([]);
+      setPrediction(null);
+    }, 15000);
+    return () => clearTimeout(t);
+  }, [fantomes]);
+
+  const nodesAtRisk = useMemo(
+    () => [...(risque?.nodes_at_risk || [])].sort((a, b) => b.score - a.score),
+    [risque]
+  );
+
+  const riskById = useMemo(
+    () => Object.fromEntries(nodesAtRisk.map((node) => [node.id, node])),
+    [nodesAtRisk]
+  );
+
   const kpis = useMemo(() => {
-    if (!risque) return null;
-    const noeuds = risque.nodes_at_risk || [];
+    const incidentList = risque?.incident_list || [];
+    const high = risque?.counts_by_class?.HIGH || 0;
+    const critical = risque?.counts_by_class?.CRITICAL || 0;
     return {
-      actifs: risque.active_incidents,
-      critiques: (risque.counts_by_class?.CRITICAL ?? 0) + (risque.counts_by_class?.HIGH ?? 0),
-      hospitals: noeuds.filter((n) => n.kind === "Hospital").length,
-      profondeur: risque.incident_list.reduce((m, i) => Math.max(m, i.max_depth), 0),
+      actifs: risque?.active_incidents ?? 0,
+      critiques: high + critical,
+      hospitals: nodesAtRisk.filter(
+        (n) => n.kind === "Hospital" && ["HIGH", "CRITICAL"].includes(n.risk)
+      ).length,
+      profondeur: incidentList.reduce((m, i) => Math.max(m, i.max_depth || 0), 0),
     };
+  }, [risque, nodesAtRisk]);
+
+  const cityStatus = useMemo(() => {
+    if ((risque?.counts_by_class?.CRITICAL || 0) > 0) return "CRITICAL";
+    if ((risque?.counts_by_class?.HIGH || 0) > 0) return "DEGRADED";
+    if ((risque?.active_incidents || 0) > 0) return "WATCH";
+    return "STABLE";
   }, [risque]);
+
+  const gererSelection = (node) => {
+    setCible(node);
+    setRisqueSelectionne(riskById[node.id] || null);
+    setPrediction(null);
+    setFantomes([]);
+  };
+
+  const ouvrirRisque = (node) => {
+    const infrastructure = infra.find((item) => item.id === node.id);
+    if (infrastructure) setCible(infrastructure);
+    setRisqueSelectionne(node);
+  };
 
   const declencher = async (definition) => {
     if (!cible) return;
+
     const contenu = {
       type: definition.type,
       severity: definition.severite,
       target_id: cible.id,
       description: `Déclenché depuis l'interface — cible ${cible.name}`,
+      payload: { source: "urban-butterfly-ui" },
     };
+
     try {
       if (modeSimulation) {
         const predict = await postWhatif(contenu);
         setPrediction(predict);
         setFantomes(predict.impacts.map((i) => i.id));
-        setToast(`🔮 Prédiction What-if calculée (côté lecture seule)`);
+        setToast(`🔮 What-if : ${predict.total_count} impact(s) prédit(s)`);
       } else {
         const resultat = await postEvent(contenu);
         setVagues(
-          resultat.impact.impacts.map((i) => ({ id: i.id, depth: i.depth, score: i.score }))
+          resultat.impact.impacts.map((i) => ({
+            id: i.id,
+            depth: i.depth,
+            score: i.score,
+          }))
         );
-        setFantomes(null);
+        setFantomes([]);
         setPrediction(null);
-        setToast(`🦋 Incident propagé : ${resultat.impact.total_count} nœud(s) avec impact`);
+        setToast(`🦋 Incident propagé : ${resultat.impact.total_count} impact(s)`);
+        await refresh();
       }
     } catch (exc) {
       setToast(`⛔ ${exc.message}`);
     }
   };
 
-  useEffect(() => {
-    if (!fantomes) return;
-    const t = setTimeout(() => {
-      setFantomes(null);
-      setPrediction(null);
-    }, 12000);
-    return () => clearTimeout(t);
-  }, [fantomes]);
-
-  const gererSelection = (node) => {
-    setCible(node);
-    setPrediction(null);
-    setFantomes(null);
-  };
-
   const resoudre = async (id) => {
     try {
       await resolveEvent(id);
-      setRisque(await getRisk());
+      await refresh();
       setToast("✅ Incident résolu, état restauré");
     } catch (exc) {
       setToast(`⛔ ${exc.message}`);
     }
   };
 
-  const arrose = (node) => node.kind === "Zone" ? "zone" : node.kind;
-
   return (
-    <div className="app">
+    <div className="app app-v2">
       <header className="header">
         <div className="logo">🦋</div>
         <div className="titre">
-          <h1>
-            Urban <span>Butterfly</span>
-          </h1>
-          <p>Simulateur intelligent de risques en cascade — "Un événement, mille conséquences"</p>
+          <h1>Urban <span>Butterfly</span></h1>
+          <p>Centre d'analyse des risques urbains en cascade</p>
         </div>
+
+        <div className={`city-status status-${cityStatus.toLowerCase()}`}>
+          <small>CITY STATUS</small>
+          <strong>● {cityStatus}</strong>
+        </div>
+
         <div className="horloge">
-          Ville de <b>Tunis</b>
+          Grand Tunis
           <b>{horloge}</b>
         </div>
       </header>
 
-      <aside className="sidebar">
-        <section>
-          <div className="section-titre">Bulletin de santé ville</div>
-          <div className="kpis">
-            <div className="kpi kpi-rouge">
-              <div className="valeur">{kpis?.actifs ?? "—"}</div>
-              <div className="libelle">Incidents actifs</div>
-            </div>
-            <div className="kpi kpi-ambre">
-              <div className="valeur">{kpis?.critiques ?? "—"}</div>
-              <div className="libelle">Nœuds à haut risque</div>
-            </div>
-            <div className="kpi kpi-violet">
-              <div className="valeur">{kpis?.hospitals ?? "—"}</div>
-              <div className="libelle">Hôpitaux menacés</div>
-            </div>
-            <div className="kpi kpi-cyan">
-              <div className="valeur">{kpis?.profondeur ?? "—"}</div>
-              <div className="libelle">Profondeur cascade</div>
-            </div>
-          </div>
-        </section>
+      <section className="kpi-strip">
+        <div className="kpi-horizontal kpi-rouge">
+          <span>Incidents actifs</span><strong>{kpis.actifs}</strong>
+        </div>
+        <div className="kpi-horizontal kpi-ambre">
+          <span>Risques HIGH / CRITICAL</span><strong>{kpis.critiques}</strong>
+        </div>
+        <div className="kpi-horizontal kpi-violet">
+          <span>Hôpitaux menacés</span><strong>{kpis.hospitals}</strong>
+        </div>
+        <div className="kpi-horizontal kpi-cyan">
+          <span>Profondeur max</span><strong>{kpis.profondeur}</strong>
+        </div>
+      </section>
 
+      <aside className="sidebar control-panel">
         <section>
-          <div className="section-titre">Cible</div>
+          <div className="section-titre">Contrôle scénario</div>
           <div className="cible">
             {cible ? (
               <>
-                Cible verrouillée : <b>{cible.name}</b>
-                <small style={{ display: "block", color: "var(--ink-dim)" }}>
-                  {arrose(cible)} — clic sur un autre pin pour changer
-                </small>
+                <div className="target-title">
+                  <span>{EMOJI_KIND[cible.kind] || "📍"}</span>
+                  <div>
+                    <b>{cible.name}</b>
+                    <small>{cible.id} · {cible.kind}</small>
+                  </div>
+                </div>
+                <div className="target-meta">
+                  <span>Statut <b>{cible.status || "—"}</b></span>
+                  <span>Criticité <b>{cible.criticality ?? "—"}/5</b></span>
+                </div>
               </>
             ) : (
               <>
                 <b>Aucune cible</b>
-                <div style={{ color: "var(--ink-dim)" }}>
-                  Cliquez sur un nœud de la carte pour le cibler
-                </div>
+                <small>Cliquez sur un nœud de la carte.</small>
               </>
             )}
           </div>
@@ -214,18 +267,12 @@ export default function App() {
 
         <section>
           <div className="section-titre">Déclencher un incident</div>
-          {cible && (
-            <p style={{ fontSize: 11, color: "var(--ink-dim)", marginBottom: 6 }}>
-              Fascicule adapté : {TYPES_INCIDENT.filter((d) => d.cibles.includes(cible.kind)).map((d) => d.label).join(" · ") || "aucun incident possible sur ce type"}
-            </p>
-          )}
           <div className="boutons-incident">
             {TYPES_INCIDENT.map((d) => (
               <button
                 key={d.type}
                 className={`btn ${d.classe}`}
                 disabled={!cible || !d.cibles.includes(cible.kind)}
-                title={d.cibles.includes(cible?.kind) ? "" : `Compatible seulement : ${d.indice}`}
                 onClick={() => declencher(d)}
               >
                 {d.label}
@@ -241,75 +288,60 @@ export default function App() {
             tabIndex={0}
             onClick={() => {
               setModeSimulation((s) => !s);
-              setFantomes(null);
+              setFantomes([]);
               setPrediction(null);
             }}
           >
             <span>
-              <span className="nom">MODE SIMULATION</span>
-              <small style={{ display: "block", color: "var(--ink-dim)" }}>
-                Prévoir l'impact sans rien modifier
-              </small>
+              <span className="nom">MODE WHAT-IF</span>
+              <small>Prévoir sans modifier la ville</small>
             </span>
             <span className={`interrupteur ${modeSimulation ? "on" : ""}`} />
           </div>
         </section>
 
         {prediction && (
-          <section>
-            <div className="section-titre">🔮 Prédiction what-if</div>
-            <div className="prediction">
-              {prediction.impacts.length === 0 ? (
-                <>Aucune conséquence directe détectée.</>
-              ) : (
-                prediction.impacts.map((impact) => (
-                  <div className="rang" key={impact.id}>
-                    <span>
-                      {impact.name}
-                      <small style={{ color: "var(--ink-dim)" }}> (niveau {impact.depth})</small>
-                    </span>
-                    <b style={{ color: impact.risk === "CRITICAL" ? "var(--red)" : impact.risk === "HIGH" ? "var(--amber)" : "var(--cyan)" }}>
-                      {impact.score}/100
-                    </b>
-                  </div>
-                ))
-              )}
+          <section className="whatif-card">
+            <div className="section-titre">Prédiction What-if</div>
+            <div className="whatif-summary">
+              <div><strong>{prediction.total_count}</strong><span>impacts</span></div>
+              <div><strong>{prediction.max_depth}</strong><span>profondeur</span></div>
+              <div>
+                <strong>
+                  {Math.max(0, ...prediction.impacts.map((i) => i.score))}
+                </strong>
+                <span>risque max</span>
+              </div>
+            </div>
+            <div className="prediction-list">
+              {prediction.impacts.slice(0, 6).map((impact) => (
+                <div className="prediction-row" key={impact.id}>
+                  <span>{EMOJI_KIND[impact.kind] || "📍"} {impact.name}</span>
+                  <RiskBadge risk={impact.risk} />
+                  <b>{impact.score}</b>
+                </div>
+              ))}
             </div>
           </section>
         )}
 
-        <section>
+        <section className="active-incidents">
           <div className="section-titre">Incidents actifs</div>
           {(risque?.incident_list || []).length === 0 ? (
-            <p style={{ color: "var(--ink-dim)", fontSize: 12.5 }}>
-              Situation calme dans la ville. Les capteurs virtuels veillent...
-            </p>
+            <div className="empty-state">✓ Aucun incident actif</div>
           ) : (
             (risque?.incident_list || []).map((incident) => (
-              <div className="incident" key={incident.event_id}>
-                <span className="tag">{incident.type}</span>
-                <div>
-                  {incident.target_id}
-                  <small>prof. {incident.max_depth} · {incident.total_count} nœuds</small>
+              <article className="incident-card" key={incident.event_id}>
+                <div className="incident-head">
+                  <span className="incident-type">{incident.type}</span>
+                  <span>{incident.severity}</span>
                 </div>
-                <button className="btn-resoudre" onClick={() => resoudre(incident.event_id)}>
-                  Résoudre
-                </button>
-              </div>
-            ))
-          )}
-        </section>
-
-        <section>
-          <div className="section-titre">Historique (MongoDB)</div>
-          {historique.length === 0 ? (
-            <p style={{ color: "var(--ink-dim)", fontSize: 12.5 }}>Aucun événement encore.</p>
-          ) : (
-            historique.slice(0, 8).map((ev, i) => (
-              <div key={i} style={{ fontSize: 11.5, color: "var(--ink-dim)", marginBottom: 4, fontFamily: "var(--font-mono)" }}>
-                {new Date(ev.timestamp).toLocaleTimeString("fr-FR", { hour12: false })} — {ev.type} → {ev.target_id}
-                {ev.status === "RESOLVED" ? " ✅" : " 🔴"}
-              </div>
+                <strong>{incident.target_id}</strong>
+                <small>
+                  {incident.total_count} impact(s) · profondeur {incident.max_depth}
+                </small>
+                <button onClick={() => resoudre(incident.event_id)}>Résoudre</button>
+              </article>
             ))
           )}
         </section>
@@ -321,17 +353,94 @@ export default function App() {
           cibleId={cible?.id}
           onSelection={gererSelection}
           vaguesCascades={vagues}
-          fantomes={fantomes || []}
+          fantomes={fantomes}
+          riskById={riskById}
         />
         {toast && <div className="toast">{toast}</div>}
       </main>
 
-      <footer className="footer">
-        <span className="dot-verte" />
-        {erreur ? <span style={{ color: "var(--red)" }}>{erreur}</span> : (
-          <span>API FastAPI — Neo4j graphe · MongoDB historique · météo Open-Meteo (réelle)</span>
+      <aside className="risk-center">
+        <div className="risk-center-header">
+          <div>
+            <small>LIVE ANALYSIS</small>
+            <h2>Risk Center</h2>
+          </div>
+          <span>{nodesAtRisk.length} nœuds</span>
+        </div>
+
+        {risqueSelectionne ? (
+          <section className="risk-focus">
+            <div className="risk-focus-top">
+              <div className="risk-score-large">{risqueSelectionne.score}</div>
+              <div>
+                <RiskBadge risk={risqueSelectionne.risk} />
+                <h3>{risqueSelectionne.name}</h3>
+                <small>{risqueSelectionne.kind} · {risqueSelectionne.id}</small>
+              </div>
+            </div>
+            <div className="risk-meter">
+              <i style={{ width: `${risqueSelectionne.score}%` }} />
+            </div>
+            <div className="section-titre">Pourquoi ce risque ?</div>
+            <ul className="risk-reasons">
+              {(risqueSelectionne.reasons || []).map((reason, i) => (
+                <li key={i}>{reason}</li>
+              ))}
+            </ul>
+          </section>
+        ) : (
+          <div className="risk-hint">
+            Sélectionnez un risque ci-dessous pour afficher son explication.
+          </div>
         )}
-        <span style={{ marginLeft: "auto" }}>Urban Butterfly v0.1 — projet NoSQL</span>
+
+        <section className="risk-list-wrap">
+          <div className="section-titre">Priorités</div>
+          <div className="risk-list">
+            {nodesAtRisk.length === 0 ? (
+              <div className="empty-state">Aucun risque calculé actuellement.</div>
+            ) : (
+              nodesAtRisk.slice(0, 10).map((node, index) => (
+                <button
+                  className={`risk-row ${risqueSelectionne?.id === node.id ? "selected" : ""}`}
+                  key={node.id}
+                  onClick={() => ouvrirRisque(node)}
+                >
+                  <span className="rank">#{index + 1}</span>
+                  <span className="risk-icon">{EMOJI_KIND[node.kind] || "📍"}</span>
+                  <span className="risk-name">
+                    <b>{node.name}</b>
+                    <small>{node.id} · niveau {node.depth}</small>
+                  </span>
+                  <RiskBadge risk={node.risk} />
+                  <strong className="risk-score">{node.score}</strong>
+                </button>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="history-mini">
+          <div className="section-titre">Derniers événements</div>
+          {historique.slice(0, 5).map((ev, i) => (
+            <div className="history-row" key={ev.id || i}>
+              <span>{new Date(ev.timestamp).toLocaleTimeString("fr-FR", { hour12: false })}</span>
+              <b>{ev.type}</b>
+              <span>→ {ev.target_id}</span>
+              <i className={ev.status === "RESOLVED" ? "resolved" : "active"} />
+            </div>
+          ))}
+        </section>
+      </aside>
+
+      <footer className="footer">
+        <span className={erreur ? "dot-error" : "dot-verte"} />
+        {erreur ? (
+          <span className="footer-error">{erreur}</span>
+        ) : (
+          <span>FastAPI · Neo4j · MongoDB · Open-Meteo</span>
+        )}
+        <span className="footer-right">Urban Butterfly · NoSQL Digital Twin</span>
       </footer>
     </div>
   );
