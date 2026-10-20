@@ -37,6 +37,12 @@ const RISK_COLORS = {
   CRITICAL: "#f43f5e",
 };
 
+const toLatLngs = (flat) => {
+  const out = [];
+  for (let i = 0; i + 1 < flat.length; i += 2) out.push([flat[i], flat[i + 1]]);
+  return out;
+};
+
 export default function MapView({
   infra,
   cibleId,
@@ -314,7 +320,7 @@ export default function MapView({
     layer.clearLayers();
     if (!trajet || !Array.isArray(trajet.coords) || trajet.coords.length < 4) return;
 
-    const latlngs = trajet.coords;
+    const latlngs = toLatLngs(trajet.coords);
 
     L.polyline(latlngs, {
       color: "#34d399",
@@ -369,14 +375,16 @@ export default function MapView({
       const couleur =
         mission.status === "BLOCKED" ? "#f43f5e" : mission.status === "DIVERTED" ? "#22d3ee" : "#34d399";
 
-      L.polyline(path, {
+      const latlngs = toLatLngs(path);
+
+      L.polyline(latlngs, {
         color: couleur,
         weight: 11,
         opacity: 0.13,
         lineCap: "round",
       }).addTo(layer);
 
-      L.polyline(path, {
+      L.polyline(latlngs, {
         color: couleur,
         weight: 3,
         opacity: 0.85,
