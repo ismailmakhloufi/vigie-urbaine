@@ -28,3 +28,6 @@ export const postWhatif = (body) =>
 
 export const resolveEvent = (id) =>
   apiFetch(`/events/${id}/resolve`, { method: "POST" });
+
+export const getEventImpact = (id) =>
+  apiFetch(`/events/${id}/impact`);

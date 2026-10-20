@@ -4,6 +4,7 @@ import {
   getInfrastructure,
   getRisk,
   getEvents,
+  getEventImpact,
   postEvent,
   postWhatif,
   resolveEvent,
@@ -67,6 +68,7 @@ export default function App() {
   const [horloge, setHorloge] = useState("");
   const [erreur, setErreur] = useState(null);
   const [risqueSelectionne, setRisqueSelectionne] = useState(null);
+  const [cascade, setCascade] = useState(null);
 
   const refresh = async () => {
     try {
@@ -144,17 +146,34 @@ export default function App() {
     return "STABLE";
   }, [risque]);
 
+  const chargerCascade = async (id) => {
+    const incident = (risque?.incident_list || []).find(
+      (item) => item.target_id === id
+    );
+    if (!incident) {
+      setCascade(null);
+      return;
+    }
+    try {
+      setCascade(await getEventImpact(incident.event_id));
+    } catch {
+      setCascade(null);
+    }
+  };
+
   const gererSelection = (node) => {
     setCible(node);
     setRisqueSelectionne(riskById[node.id] || null);
     setPrediction(null);
     setFantomes([]);
+    chargerCascade(node.id);
   };
 
   const ouvrirRisque = (node) => {
     const infrastructure = infra.find((item) => item.id === node.id);
     if (infrastructure) setCible(infrastructure);
     setRisqueSelectionne(node);
+    chargerCascade(node.id);
   };
 
   const declencher = async (definition) => {
@@ -387,6 +406,29 @@ export default function App() {
                 <li key={i}>{reason}</li>
               ))}
             </ul>
+            {cascade && (
+              <>
+                <div className="section-titre" style={{ marginTop: 10 }}>
+                  Ce qu'il impacte ({cascade.total_count})
+                </div>
+                {cascade.impacts.length === 0 ? (
+                  <div className="empty-state">Aucune propagation détectée.</div>
+                ) : (
+                  <div className="prediction-list">
+                    {cascade.impacts.slice(0, 8).map((impact) => (
+                      <div className="prediction-row" key={impact.id}>
+                        <span>
+                          {EMOJI_KIND[impact.kind] || "📍"} {impact.name}
+                          <small> · niveau {impact.depth}</small>
+                        </span>
+                        <RiskBadge risk={impact.risk} />
+                        <b>{impact.score}</b>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </section>
         ) : (
           <div className="risk-hint">
