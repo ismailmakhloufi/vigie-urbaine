@@ -52,10 +52,16 @@ SYSTEM_PROMPT = (
     "Neo4j + MongoDB). Règles absolues :\n"
     "1. Réponds en FRANÇAIS, concis (max 6 phrases), style cellule de crise.\n"
     "2. Utilise UNIQUEMENT les faits fournis entre <<<FAITS>>> ... <<<FIN>>>. "
-    "N'invente aucun chiffre, aucun nœud, aucune relation.\n"
+    "N'invente aucun chiffre, aucun nœud, aucune relation, et surtout "
+    "AUCUN contact/organisme : si 'plan_daction' est absent des faits, "
+    "dis simplement qu'aucun plan n'est actif pour cette cible.\n"
     "3. Si l'information manque dans les faits, dis-le clairement.\n"
     "4. Explique le pourquoi en s'appuyant sur les raisons de score fournies.\n"
-    "5. Pas de markdown lourd : phrases courtes, puces simples autorisées."
+    "5. Si l'opérateur demande COMMENT résoudre un problème, ordonne les "
+    "actions de 'plan_daction', cite les contacts à appeler et les détours/ repli "
+    "disponibles, puis signale que la validation finale se fait via le bouton "
+    "'Résoudre' (restauration automatique de l'état).\n"
+    "6. Pas de markdown lourd : phrases courtes, puces simples autorisées."
 )
 
 
@@ -100,6 +106,25 @@ def _facts_for_node(node_id: str) -> dict | None:
             }
         except LookupError:
             pass
+        try:
+            plan = build_recommendations(event_id)
+            facts["plan_daction"] = {
+                "contacts_a_appeler": plan.get("contacts", []),
+                "actions_ordonnees": plan.get("actions", []),
+                "detours_disponibles": [
+                    {
+                        "vers": d["dest_id"],
+                        "par": d["via_names"],
+                        "sauts": d["jumps"],
+                    }
+                    for d in (plan.get("detours") or [])
+                ],
+                "secours_disponibles": [
+                    f"{a['id']} ({a['note']})" for a in (plan.get("alternatives") or [])
+                ],
+            }
+        except LookupError:
+            pass
     else:
         active_count = mongo_client.count_active_events()
         kind = facts.get("kind")
@@ -123,7 +148,7 @@ def _facts_for_node(node_id: str) -> dict | None:
 
 def _extract_node_id(question: str) -> str | None:
     """Cherche un id concret (H1, R19, PH4...) dans la question."""
-    match = re.search(r"\b([HPTWZRPh]\d{1,2}|PH\d{1,2})\b", question)
+    match = re.search(r"\b(ph\d{1,2}|[hptrwz]\d{1,2})\b", question, re.IGNORECASE)
     if match:
         candidate = match.group(1).upper()
         exists = neo4j_client.query(
