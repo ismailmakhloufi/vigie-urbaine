@@ -400,3 +400,50 @@ SET rel.model='Urban Butterfly', rel.simulation=true;
 // WHERE r.flood_susceptibility >= 4
 // RETURN r.id, r.name, r.flood_susceptibility
 // ORDER BY r.flood_susceptibility DESC;
+
+// ============================================================
+// GEOMETRIE DES ROUTES (v4) - TRACES GPS SYNTHETIQUES
+// Chaque route = trace de points [lat1, lon1, lat2, lon2, ...]
+// alignee sur la vraie geographie du Grand Tunis (rue -> parcours).
+// Sert au rendu polyline sur la carte (MapView).
+// ============================================================
+
+// --- Arteres R1-R5 : traversent plusieurs zones ---
+MATCH (r:Road {id:'R1'}) SET r.path=[36.750,10.245, 36.790,10.255, 36.835,10.262, 36.875,10.275];
+MATCH (r:Road {id:'R2'}) SET r.path=[36.799,10.190, 36.806,10.186, 36.811,10.184];
+MATCH (r:Road {id:'R3'}) SET r.path=[36.818,10.188, 36.830,10.176, 36.842,10.170];
+MATCH (r:Road {id:'R4'}) SET r.path=[36.813,10.193, 36.838,10.190, 36.862,10.196, 36.878,10.210];
+MATCH (r:Road {id:'R5'}) SET r.path=[36.782,10.190, 36.797,10.222, 36.812,10.248, 36.828,10.262];
+
+// --- Z1 Tunis Centre ---
+MATCH (r:Road {id:'R6'})  SET r.path=[36.800,10.184, 36.806,10.182];
+MATCH (r:Road {id:'R7'})  SET r.path=[36.809,10.196, 36.816,10.192];
+MATCH (r:Road {id:'R8'})  SET r.path=[36.812,10.200, 36.818,10.190];
+MATCH (r:Road {id:'R21'}) SET r.path=[36.809,10.177, 36.800,10.175];
+MATCH (r:Road {id:'R23'}) SET r.path=[36.798,10.175, 36.795,10.180];
+MATCH (r:Road {id:'R25'}) SET r.path=[36.812,10.168, 36.817,10.172];
+MATCH (r:Road {id:'R27'}) SET r.path=[36.818,10.180, 36.823,10.186];
+MATCH (r:Road {id:'R30'}) SET r.path=[36.812,10.176, 36.818,10.180];
+
+// --- Z2 La Marsa / Gammarth ---
+MATCH (r:Road {id:'R9'})  SET r.path=[36.880,10.298, 36.878,10.288];
+MATCH (r:Road {id:'R10'}) SET r.path=[36.876,10.305, 36.880,10.310];
+MATCH (r:Road {id:'R11'}) SET r.path=[36.868,10.293, 36.866,10.299];
+MATCH (r:Road {id:'R26'}) SET r.path=[36.881,10.322, 36.884,10.317, 36.886,10.312];
+
+// --- Z3 L'Ariana ---
+MATCH (r:Road {id:'R12'}) SET r.path=[36.852,10.205, 36.856,10.198];
+MATCH (r:Road {id:'R13'}) SET r.path=[36.851,10.216, 36.854,10.210];
+MATCH (r:Road {id:'R14'}) SET r.path=[36.855,10.240, 36.850,10.248];
+MATCH (r:Road {id:'R20'}) SET r.path=[36.859,10.242, 36.862,10.249];
+
+// --- Z4 Ben Arous / Sud ---
+MATCH (r:Road {id:'R15'}) SET r.path=[36.791,10.216, 36.794,10.221];
+MATCH (r:Road {id:'R16'}) SET r.path=[36.787,10.211, 36.783,10.206];
+MATCH (r:Road {id:'R17'}) SET r.path=[36.746,10.213, 36.741,10.220];
+MATCH (r:Road {id:'R18'}) SET r.path=[36.796,10.233, 36.800,10.238];
+MATCH (r:Road {id:'R19'}) SET r.path=[36.785,10.222, 36.780,10.228, 36.776,10.234];
+MATCH (r:Road {id:'R22'}) SET r.path=[36.823,10.245, 36.818,10.252];
+MATCH (r:Road {id:'R24'}) SET r.path=[36.752,10.228, 36.754,10.233];
+MATCH (r:Road {id:'R28'}) SET r.path=[36.806,10.246, 36.802,10.251];
+MATCH (r:Road {id:'R29'}) SET r.path=[36.750,10.218, 36.748,10.224];

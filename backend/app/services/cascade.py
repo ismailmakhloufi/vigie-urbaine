@@ -85,14 +85,15 @@ def _propagation_rows(event_type: str, target_id: str) -> list[dict]:
 
                 WITH r
 
-                MATCH (warehouse:Warehouse:Infrastructure)-[:CONNECTED_BY]->(r)
+                MATCH q = (warehouse:Warehouse:Infrastructure)
+                          -[:CONNECTED_BY*1..{MAX_PROPAGATION_DEPTH}]->(r)
                 MATCH (service:Infrastructure)-[:SUPPLIED_BY]->(warehouse)
 
                 RETURN
                     service.id AS id,
                     service.kind AS kind,
                     service.name AS name,
-                    2 AS depth,
+                    length(q) + 1 AS depth,
                     service.criticality AS criticality,
                     service.backup_power_hours AS backup_power_hours
             }}

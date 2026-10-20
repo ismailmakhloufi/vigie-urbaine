@@ -108,6 +108,81 @@ export default function MapView({
       const taille = TAILLES[node.kind] || 9;
       const riskColor = risk ? RISK_COLORS[risk.risk] : null;
 
+      // ----- Routes formatees : polyline reelle (trace GPS) -----
+      if (node.kind === "Road" && Array.isArray(node.path) && node.path.length >= 4) {
+        const pts = [];
+        for (let i = 0; i + 1 < node.path.length; i += 2) {
+          pts.push([node.path[i], node.path[i + 1]]);
+        }
+        if (pts.length >= 2) {
+          const bloquee = node.status && node.status !== "CLEAR";
+
+          if (risk && risk.score >= 30) {
+            L.polyline(pts, {
+              color: riskColor,
+              weight: risk.risk === "CRITICAL" ? 13 : 9,
+              opacity: 0.2,
+              lineCap: "round",
+              lineJoin: "round",
+              className: risk.risk === "CRITICAL" ? "risk-map-pulse" : "",
+            }).addTo(couche.current);
+          }
+
+          const popupHtml =
+            `<div class="map-popup">` +
+              `<b>🛣️ ${node.name}</b><br>` +
+              `<span>Road · ${node.id}</span><br>` +
+              `Statut : <b>${node.status || "UNKNOWN"}</b><br>` +
+              (risk
+                ? `Risque : <b style="color:${riskColor}">${risk.risk} · ${risk.score}/100</b><br>`
+                : "Risque : LOW / non exposé<br>") +
+              (node.criticality != null ? `Criticité : ${node.criticality}/5<br>` : "") +
+            `</div>`;
+
+          const route = L.polyline(pts, {
+            color: couleur,
+            weight: node.criticality >= 4 ? 5 : 3,
+            opacity: 0.8,
+            lineCap: "round",
+            lineJoin: "round",
+            dashArray: bloquee ? "7 9" : undefined,
+          })
+            .addTo(couche.current)
+            .bindPopup(popupHtml);
+          route.on("click", () => onSelection(node));
+
+          const pivot = [
+            pts.reduce((s, p) => s + p[0], 0) / pts.length,
+            pts.reduce((s, p) => s + p[1], 0) / pts.length,
+          ];
+          const classesPin =
+            "ub-pin route-pin" +
+            (node.id === cibleId ? " selected" : "") +
+            (fantomes.includes(node.id) ? " fantome" : "");
+          const badge = L.marker(pivot, {
+            interactive: true,
+            zIndexOffset: 400,
+            icon: L.divIcon({
+              className: "",
+              iconSize: [16, 16],
+              iconAnchor: [8, 8],
+              html:
+                `<div class="${classesPin}" style="color:${couleur};width:16px;height:16px">` +
+                  `<div class="coeur"></div>` +
+                  `<div class="etiquette">${node.id}</div>` +
+                `</div>`,
+            }),
+          })
+            .addTo(couche.current)
+            .bindPopup(popupHtml);
+
+          const badgeEl = badge.getElement();
+          badge.on("click", () => onSelection(node));
+          markers.current[node.id] = { marker: badge, el: badgeEl, pin: badgeEl };
+          continue;
+        }
+      }
+
       if (risk && risk.score >= 30) {
         L.circleMarker([node.lat, node.lon], {
           radius: taille + 7,

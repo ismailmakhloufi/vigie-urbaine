@@ -13,7 +13,8 @@ def infrastructure():
         "n.lat AS lat, n.lon AS lon, n.status AS status, "
         "n.criticality AS criticality, "
         "n.backup_power_hours AS backup_power_hours, "
-        "n.medicine_stock_days AS stock_days "
+        "n.medicine_stock_days AS stock_days, "
+        "n.path AS path "
         "ORDER BY n.kind, n.id"
     )
     return rows

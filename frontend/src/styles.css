@@ -308,6 +308,8 @@ button { font: inherit; }
   background:transparent; border:2px dashed var(--violet);
   box-shadow:0 0 15px var(--violet);
 }
+.ub-pin.route-pin .coeur { width:8px; height:8px; border-width:1.5px; }
+.ub-pin.route-pin .etiquette { margin-top:2px; font-size:7px; }
 .onde {
   position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
   border:2.5px solid currentColor; border-radius:50%;
