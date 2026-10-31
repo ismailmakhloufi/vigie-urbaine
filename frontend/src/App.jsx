@@ -11,10 +11,7 @@ import {
   postEvent,
   postWhatif,
   resolveEvent,
-  postRouting,
   getMissions,
-  postMission,
-  cancelMission,
 } from "./api.js";
 
 const TYPES_INCIDENT = [
@@ -89,16 +86,7 @@ export default function App() {
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const [trajet, setTrajet] = useState(null);
-  const [trajetBusy, setTrajetBusy] = useState(false);
-  const [routingOrigin, setRoutingOrigin] = useState("W1");
-  const [routingDest, setRoutingDest] = useState("H1");
-  const [routingProfile, setRoutingProfile] = useState("AMBULANCE");
   const [missions, setMissions] = useState([]);
-  const [missionBusy, setMissionBusy] = useState(false);
-  const [mOrigin, setMOrigin] = useState("W1");
-  const [mDest, setMDest] = useState("H1");
-  const [mProfile, setMProfile] = useState("AMBULANCE");
   const chatLog = useRef(null);
 
   const refresh = async () => {
@@ -182,71 +170,6 @@ export default function App() {
   const missionsActives = missions.filter((m) =>
     ["EN_ROUTE", "DIVERTED", "BLOCKED"].includes(m.status)
   );
-
-  const lancerMission = async () => {
-    if (missionBusy || mOrigin === mDest) return;
-    setMissionBusy(true);
-    try {
-      await postMission({
-        origin_id: mOrigin,
-        destination_id: mDest,
-        profile: mProfile,
-        caller_note: "Appel d'urgence",
-      });
-      setToast("🚨 Mission déployée");
-      const missionsData = await getMissions();
-      setMissions(missionsData);
-    } catch (exc) {
-      setToast(`Déploiement refusé : ${exc.message}`);
-    } finally {
-      setMissionBusy(false);
-    }
-  };
-
-  const annulerMission = async (missionId) => {
-    try {
-      await cancelMission(missionId);
-      setToast(`Mission ${missionId} annulée`);
-      setMissions(await getMissions());
-    } catch (exc) {
-      setToast(`Annulation refusée : ${exc.message}`);
-    }
-  };
-
-  const optionsRoutage = useMemo(
-    () =>
-      infra
-        .filter((n) => n.kind !== "Zone")
-        .sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))
-        .map((n) => ({
-          id: n.id,
-          label: `${EMOJI_KIND[n.kind] || "📍"} ${n.name} (${n.id})`,
-        })),
-    [infra]
-  );
-
-  const calculerTrajet = async () => {
-    if (trajetBusy) return;
-    setTrajetBusy(true);
-    try {
-      const resultat = await postRouting({
-        origin_id: routingOrigin,
-        destination_id: routingDest,
-        profile: routingProfile,
-      });
-      const chemins = resultat.route.map((roadId) => {
-        const road = infra.find((n) => n.id === roadId);
-        return Array.isArray(road?.path) ? road.path : [];
-      });
-      const coords = chemins.flat().filter((v) => typeof v === "number");
-      setTrajet({ ...resultat, coords });
-    } catch (exc) {
-      setToast(`Routing échoué : ${exc.message}`);
-      setTrajet(null);
-    } finally {
-      setTrajetBusy(false);
-    }
-  };
 
   const chargerCascade = async (id) => {
     const incident = (risque?.incident_list || []).find(
@@ -477,169 +400,6 @@ export default function App() {
           </section>
         )}
 
-        <section className="routing-panel">
-          <div className="section-titre">🚑 Routage d'urgence</div>
-          <div className="routing-form">
-            <label>
-              Départ
-              <select value={routingOrigin} onChange={(e) => setRoutingOrigin(e.target.value)}>
-                {optionsRoutage.map((o) => (
-                  <option key={o.id} value={o.id}>{o.label}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Arrivée
-              <select value={routingDest} onChange={(e) => setRoutingDest(e.target.value)}>
-                {optionsRoutage.map((o) => (
-                  <option key={o.id} value={o.id}>{o.label}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Profil
-              <select value={routingProfile} onChange={(e) => setRoutingProfile(e.target.value)}>
-                <option value="AMBULANCE">🚑 Ambulance — sécurité max</option>
-                <option value="SUPPLY">🚚 Logistique — éviter trafic</option>
-                <option value="NORMAL">🚗 Standard</option>
-              </select>
-            </label>
-            <div className="routing-actions">
-              <button
-                className="btn btn-primaire"
-                disabled={trajetBusy || routingOrigin === routingDest}
-                onClick={calculerTrajet}
-              >
-                {trajetBusy ? "Calcul…" : "Calculer le trajet"}
-              </button>
-              {trajet && (
-                <button className="btn" onClick={() => setTrajet(null)}>Effacer</button>
-              )}
-            </div>
-          </div>
-
-          {trajet && (
-            <div className="routing-result">
-              <div className="routing-eta">
-                <div>
-                  <strong>{trajet.estimated_time_min} min</strong>
-                  <span>temps estimé</span>
-                </div>
-                <div>
-                  <strong>{trajet.distance_km} km</strong>
-                  <span>distance</span>
-                </div>
-                <div>
-                  <strong>{trajet.route.length}</strong>
-                  <span>tronçons</span>
-                </div>
-              </div>
-              <div className="routing-path">
-                {trajet.route_names.map((name, i) => (
-                  <span key={`${trajet.route[i]}-${i}`} className="routing-seg">
-                    {name}
-                  </span>
-                ))}
-              </div>
-              {trajet.avoided.length > 0 && (
-                <div className="routing-avoided">
-                  {trajet.avoided.map((a) => (
-                    <span key={a.id} className="avoid-chip">
-                      ⛔ {a.name || a.id} · {a.reason}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {trajet.dynamic_notes?.map((note) => (
-                <small key={note} className="routing-note">🌐 {note}</small>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="missions-panel">
-          <div className="section-titre">📞 Appels d'urgence</div>
-          <div className="routing-form">
-            <label>
-              Véhicule au départ
-              <select value={mOrigin} onChange={(e) => setMOrigin(e.target.value)}>
-                {optionsRoutage.map((o) => (
-                  <option key={o.id} value={o.id}>{o.label}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Secourir / livrer à
-              <select value={mDest} onChange={(e) => setMDest(e.target.value)}>
-                {optionsRoutage.map((o) => (
-                  <option key={o.id} value={o.id}>{o.label}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Type de véhicule
-              <select value={mProfile} onChange={(e) => setMProfile(e.target.value)}>
-                <option value="AMBULANCE">🚑 Ambulance</option>
-                <option value="SUPPLY">🚚 Camion logistique</option>
-                <option value="NORMAL">🚗 Véhicule standard</option>
-              </select>
-            </label>
-            <button
-              className="btn btn-danger"
-              disabled={missionBusy || mOrigin === mDest}
-              onClick={lancerMission}
-            >
-              {missionBusy ? "Déploiement…" : "🚨 Déployer la mission"}
-            </button>
-          </div>
-
-          {missions.map((m) => {
-            const st = STATUS_MISSION[m.status] || STATUS_MISSION.EN_ROUTE;
-            return (
-              <article className={`mission-card ${st.classe}`} key={m.mission_id}>
-                <div className="mission-head">
-                  <span className="mission-id">🚨 {m.mission_id}</span>
-                  <span className="mission-status">{st.label}</span>
-                </div>
-                <div className="mission-route-noms">
-                  {m.origin_name} → {m.destination_name}
-                </div>
-
-                {["EN_ROUTE", "DIVERTED"].includes(m.status) && (
-                  <div className="mission-progress">
-                    <div className="mission-progress-track">
-                      <div
-                        className="mission-progress-fill"
-                        style={{ width: `${Math.round((m.progress || 0) * 100)}%` }}
-                      />
-                      <span className="mission-vehicle">🚑</span>
-                    </div>
-                    <small>
-                      {m.remaining_min > 0 ? `${m.remaining_min} min restantes` : "arrivée imminente"}
-                      {" · "}
-                      {m.distance_km} km
-                    </small>
-                  </div>
-                )}
-
-                <div className="mission-timeline">
-                  {m.timeline.slice(-3).map((entry, i) => (
-                    <div className="mission-log" key={i}>
-                      <time>{entry.at.slice(11, 16)}</time>
-                      <span>{entry.message}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {["EN_ROUTE", "DIVERTED"].includes(m.status) && (
-                  <button className="mission-cancel" onClick={() => annulerMission(m.mission_id)}>
-                    Annuler
-                  </button>
-                )}
-              </article>
-            );
-          })}
-        </section>
 
         <section className="active-incidents">
           <div className="section-titre">Incidents actifs</div>
@@ -672,7 +432,6 @@ export default function App() {
           fantomes={fantomes}
           riskById={riskById}
           itineraires={plan?.detours || []}
-          trajet={trajet}
           missions={missionsActives}
         />
         {toast && <div className="toast">{toast}</div>}

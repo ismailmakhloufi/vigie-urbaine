@@ -51,12 +51,10 @@ export default function MapView({
   fantomes,
   riskById = {},
   itineraires = [],
-  trajet = null,
   missions = [],
 }) {
   const carte = useRef(null);
   const couche = useRef(null);
-  const coucheTrajet = useRef(null);
   const coucheMissions = useRef(null);
   const markers = useRef({});
 
@@ -75,7 +73,6 @@ export default function MapView({
     }).addTo(carte.current);
 
     couche.current = L.layerGroup().addTo(carte.current);
-    coucheTrajet.current = L.layerGroup().addTo(carte.current);
     coucheMissions.current = L.layerGroup().addTo(carte.current);
 
     const resize = () => carte.current?.invalidateSize();
@@ -313,55 +310,6 @@ export default function MapView({
 
     return () => timers.forEach(clearTimeout);
   }, [vaguesCascades]);
-
-  useEffect(() => {
-    const layer = coucheTrajet.current;
-    if (!layer) return;
-    layer.clearLayers();
-    if (!trajet || !Array.isArray(trajet.coords) || trajet.coords.length < 4) return;
-
-    const latlngs = toLatLngs(trajet.coords);
-
-    L.polyline(latlngs, {
-      color: "#34d399",
-      weight: 12,
-      opacity: 0.14,
-      lineCap: "round",
-    }).addTo(layer);
-
-    L.polyline(latlngs, {
-      color: "#34d399",
-      weight: 4.5,
-      opacity: 0.95,
-      lineCap: "round",
-    })
-      .addTo(layer)
-      .bindPopup(
-        `<div class="map-popup">` +
-          `<b>🚑 ${trajet.profile} · ${trajet.origin_name} → ${trajet.destination_name}</b><br>` +
-          `${trajet.estimated_time_min} min · ${trajet.distance_km} km<br>` +
-          `via ${trajet.route_names?.join(" › ") || "…"}` +
-        `</div>`
-      );
-
-    L.circleMarker([latlngs[0], latlngs[1]], {
-      radius: 7,
-      color: "#34d399",
-      fillColor: "#34d399",
-      fillOpacity: 0.9,
-      weight: 2,
-    }).addTo(layer);
-
-    L.circleMarker([latlngs[latlngs.length - 2], latlngs[latlngs.length - 1]], {
-      radius: 7,
-      color: "#f43f5e",
-      fillColor: "#f43f5e",
-      fillOpacity: 0.9,
-      weight: 2,
-    }).addTo(layer);
-
-    carte.current?.fitBounds(L.latLngBounds(latlngs).pad(0.35));
-  }, [trajet]);
 
   useEffect(() => {
     const layer = coucheMissions.current;

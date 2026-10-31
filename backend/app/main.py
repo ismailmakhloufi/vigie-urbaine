@@ -9,7 +9,6 @@ from app.routes.events import router as events_router
 from app.routes.infra import router as infra_router
 from app.routes.risk import router as risk_router
 from app.routes.whatif import router as whatif_router
-from app.routes.routing import router as routing_router
 from app.routes.missions import router as missions_router
 from app.routes.ai import router as ai_router
 
@@ -38,7 +37,6 @@ app.add_middleware(
 app.include_router(events_router)
 app.include_router(risk_router)
 app.include_router(whatif_router)
-app.include_router(routing_router)
 app.include_router(missions_router)
 app.include_router(infra_router)
 app.include_router(ai_router)
