@@ -12,11 +12,15 @@ from app.routes.whatif import router as whatif_router
 from app.routes.missions import router as missions_router
 from app.routes.dispatch import router as dispatch_router
 from app.routes.ai import router as ai_router
+from app.services import sources
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # le monde s'agite des qu'on demarre : flux agences en ligne
+    sources.start_stream()
     yield
+    sources.stop_stream()
     neo4j_client.close()
     mongo_client.close()
 

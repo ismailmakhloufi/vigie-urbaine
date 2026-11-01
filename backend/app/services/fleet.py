@@ -18,7 +18,7 @@ SEED_FLEET = [
     {"callsign": "SAMU-17", "type": "AMBULANCE", "base_id": "W3"},
     {"callsign": "TIR-15", "type": "SUPPLY", "base_id": "W2"},
     {"callsign": "TIR-21", "type": "SUPPLY", "base_id": "W3"},
-    {"callsign": "PAT-4", "type": "NORMAL", "base_id": "W4"},
+    {"callsign": "PAT-4", "type": "NORMAL", "base_id": "W3"},
 ]
 
 

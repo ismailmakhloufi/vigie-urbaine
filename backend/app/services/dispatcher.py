@@ -100,7 +100,12 @@ def create_call(kind: str, destination_id: str, note: str = "") -> dict:
                 ref = [36.80, 10.17]
         return _distance_km(ref, coords)
 
-    chosen = min(pool, key=veh_ref)
+    chosen = sorted(pool, key=veh_ref)[0]
+    # un convoi ne part jamais de sa base pour aller a sa base : on derplace
+    for v in sorted(pool, key=veh_ref):
+        if v.get("base_id") != destination_id:
+            chosen = v
+            break
     mission = create_mission(
         origin_id=chosen["base_id"],
         destination_id=destination_id,

@@ -56,13 +56,10 @@ export const getFleet = () => apiFetch("/fleet");
 export const getCalls = (limit = 8) =>
   apiFetch(`/integration/calls?limit=${limit}`);
 
-export const postRandomCall = () =>
-  apiFetch("/integration/calls/random", { method: "POST" });
+export const getStream = () => apiFetch("/integration/stream");
 
-export const getDemo = () => apiFetch("/integration/demo");
-
-export const postDemo = (action) =>
-  apiFetch("/integration/demo", {
+export const postStreamAction = (action) =>
+  apiFetch("/integration/stream", {
     method: "POST",
     body: JSON.stringify({ action }),
   });

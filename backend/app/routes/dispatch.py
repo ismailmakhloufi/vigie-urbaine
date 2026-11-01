@@ -5,6 +5,8 @@ Sources agences (route standard) :
     POST /integration/fleet-updates : une flotte pousse l'etat d'un vehicule
     POST /integration/calls         : le CACU pousse un appel entrant
     POST /integration/calls/random  : simulateur de sources (demo)
+    GET  /integration/stream        : statut du flux automatique
+    POST /integration/stream        : pause / reprise du flux
 Console :
     GET  /fleet                     : le registre de flotte
     POST /route-options             : comparateur (3 itineraires)
@@ -17,7 +19,8 @@ Console :
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.services import demo, dispatcher, fleet, missions
+from app.services import dispatcher, fleet, missions
+from app.services import sources
 from app.services.routing import compute_route_options
 
 
@@ -58,8 +61,8 @@ class ChooseRouteRequest(BaseModel):
     variant: str = Field(pattern="^(FAST|SHORT|SAFE)$")
 
 
-class DemoAction(BaseModel):
-    action: str = Field(pattern="^(start|stop)$")
+class StreamAction(BaseModel):
+    action: str = Field(pattern="^(pause|resume)$")
 
 
 # ----- sources -----
@@ -95,16 +98,15 @@ def calls(limit: int = 12):
     return dispatcher.list_calls(limit)
 
 
-@router.post("/integration/demo")
-def run_demo(action: DemoAction):
-    if action.action == "start":
-        return demo.start_demo()
-    return demo.stop_demo()
+@router.get("/integration/stream")
+def stream_state():
+    return sources.stream_status()
 
 
-@router.get("/integration/demo")
-def demo_state():
-    return demo.demo_status()
+@router.post("/integration/stream")
+def stream_action(action: StreamAction):
+    sources.set_paused(action.action == "pause")
+    return sources.stream_status()
 
 
 # ----- console -----

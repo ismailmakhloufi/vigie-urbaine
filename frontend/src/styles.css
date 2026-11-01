@@ -757,35 +757,59 @@ button { font: inherit; }
 
 /* ==================== POSTE DE COMMANDEMENT (dispatcher) ==================== */
 
-.dispatcher-panel .dispatcher-actions {
+/* ----- voyant flux agences ----- */
+.flux-chip {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 11px;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.07);
+  border: 1px solid rgba(52, 211, 153, 0.35);
   margin-bottom: 10px;
 }
+.flux-chip.flux-pause {
+  background: rgba(250, 204, 21, 0.07);
+  border-color: rgba(250, 204, 21, 0.4);
+}
 
-.btn-dispatch {
-  flex: 1;
-  background: linear-gradient(135deg, #155e75, #0e7490);
-  border: 1px solid var(--cyan);
-  color: #cffafe;
+.flux-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #34d399;
+  animation: flux-pulse 1.6s ease-in-out infinite;
+  flex-shrink: 0;
 }
-.btn-dispatch:hover { filter: brightness(1.2); }
+.flux-chip.flux-pause .flux-dot {
+  background: #facc15;
+  animation: none;
+}
+@keyframes flux-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55); }
+  50% { box-shadow: 0 0 0 6px rgba(52, 211, 153, 0); }
+}
 
-.btn-demo {
-  flex: 1;
-  background: linear-gradient(135deg, #7c2d12, #b45309);
-  border: 1px solid #fb923c;
-  color: #fff7ed;
+.flux-info { flex: 1; line-height: 1.25; }
+.flux-info b { display: block; font-size: 12px; color: #d1fae5; }
+.flux-chip.flux-pause .flux-info b { color: #fef9c3; }
+.flux-info small { color: #6b9c91; font-size: 10px; }
+
+.flux-toggle {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: transparent;
+  color: #94a3b8;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
 }
-.btn-demo-stop {
-  flex: 1;
-  background: linear-gradient(135deg, #450a0a, #7f1d1d);
-  border: 1px solid #f87171;
-  color: #fee2e2;
-  animation: pulse-demo 1.2s ease-in-out infinite;
-}
-@keyframes pulse-demo {
-  50% { box-shadow: 0 0 12px rgba(248, 113, 113, 0.7); }
+.flux-toggle:hover {
+  color: #fff;
+  border-color: var(--cyan);
+  background: rgba(34, 211, 238, 0.08);
 }
 
 /* --- flotte --- */

@@ -14,9 +14,8 @@ import {
   getMissions,
   getFleet,
   getCalls,
-  getDemo,
-  postDemo,
-  postRandomCall,
+  getStream,
+  postStreamAction,
   postRouteOptions,
   postCorridor,
   postRadio,
@@ -117,13 +116,13 @@ export default function App() {
   const [missions, setMissions] = useState([]);
   const [flotte, setFlotte] = useState([]);
   const [appels, setAppels] = useState([]);
-  const [demo, setDemo] = useState(null);
+  const [flux, setFlux] = useState(null);
   const [comparateur, setComparateur] = useState(null);
   const chatLog = useRef(null);
 
   const refresh = async () => {
     try {
-      const [infraData, riskData, eventsData, missionsData, flotteData, appelsData, demoData] =
+      const [infraData, riskData, eventsData, missionsData, flotteData, appelsData, fluxData] =
         await Promise.all([
           getInfrastructure(),
           getRisk(),
@@ -131,7 +130,7 @@ export default function App() {
           getMissions(),
           getFleet(),
           getCalls(8),
-          getDemo(),
+          getStream(),
         ]);
       setInfra(infraData);
       setRisque(riskData);
@@ -139,7 +138,7 @@ export default function App() {
       setMissions(missionsData);
       setFlotte(flotteData);
       setAppels(appelsData);
-      setDemo(demoData);
+      setFlux(fluxData);
       setErreur(null);
     } catch (exc) {
       setErreur(`Backend injoignable : ${exc.message}`);
@@ -319,24 +318,11 @@ export default function App() {
 
   // ----- console dispatcher -----
 
-  const typeVehicule = (callsign) =>
-    flotte.find((v) => v.callsign === callsign)?.type || "AMBULANCE";
-
-  const appelAleatoire = async () => {
+  const basculerFlux = async () => {
     try {
-      const appel = await postRandomCall();
-      setToast(`📞 Appel ${appel.call_id} pris en charge : ${appel.assigned_vehicle} part en mission`);
-      await refresh();
-    } catch (exc) {
-      setToast(`⛔ ${exc.message}`);
-    }
-  };
-
-  const basculerDemo = async () => {
-    try {
-      const action = demo?.running ? "stop" : "start";
-      await postDemo(action);
-      setToast(action === "start" ? "🎬 Scénario de démo lancé (5 actes)" : "🎬 Démo arrêtée");
+      const action = flux?.paused ? "resume" : "pause";
+      await postStreamAction(action);
+      setToast(action === "pause" ? "⏸ Flux agences en pause" : "▶ Flux agences repris");
       await refresh();
     } catch (exc) {
       setToast(`⛔ ${exc.message}`);
@@ -466,15 +452,28 @@ export default function App() {
         <section className="dispatcher-panel">
           <div className="section-titre">Poste de commandement</div>
 
-          <div className="dispatcher-actions">
-            <button className="btn btn-dispatch" onClick={appelAleatoire}>
-              📞 Appel entrant
-            </button>
+          <div className={`flux-chip ${flux?.online ? "flux-live" : flux?.paused ? "flux-pause" : ""}`}>
+            <span className="flux-dot" />
+            <div className="flux-info">
+              <b>
+                {flux?.online
+                  ? "Sources agences en direct"
+                  : flux?.paused
+                    ? "Flux en pause (relève locale)"
+                    : "Sources hors ligne"}
+              </b>
+              <small>
+                {flux?.stats
+                  ? `${flux.stats.calls} appels · ${flux.stats.incidents} incidents · ${flux.stats.resolved} résolus`
+                  : "…"}
+              </small>
+            </div>
             <button
-              className={`btn ${demo?.running ? "btn-demo-stop" : "btn-demo"}`}
-              onClick={basculerDemo}
+              className="flux-toggle"
+              onClick={basculerFlux}
+              title={flux?.paused ? "Reprendre le flux" : "Mettre le flux en pause"}
             >
-              {demo?.running ? "⏹ Démo en cours" : "🎬 Lancer la démo"}
+              {flux?.paused ? "▶" : "⏸"}
             </button>
           </div>
 
