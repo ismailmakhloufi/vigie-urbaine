@@ -452,7 +452,7 @@ export default function App() {
               </b>
               <small>
                 {flux?.stats
-                  ? `${flux.stats.calls} appels · ${flux.stats.incidents} incidents · ${flux.stats.resolved} résolus`
+                  ? `${flux.stats.calls} appels · ${flux.stats.incidents} incidents · ${flux.stats.resolved || 0} résolus`
                   : "…"}
               </small>
             </div>

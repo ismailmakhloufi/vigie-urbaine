@@ -1,36 +1,71 @@
 """
-Urban Butterfly - Simulateur de sources
+Urban Butterfly - Simulateur de sources (le monde physique virtualise)
 
-En production, ces faits arrivent POUSSÉS par des tiers :
-    - le CACU (15/191) envoie les appels d'urgence ;
-    - la surveillance (capteurs, ANR, gendarmerie) signale les incidents.
+UN SEUL daemon fait vivre tout le flux de la ville, comme si des tiers
+poussaient leurs faits vers le systeme :
 
-Ici un daemon simule ces sources : il tourne avec le serveur, pousse sur
-les memes services que des agences reelles (dispatcher, events) et
-laisse le systeme se demener seul. L'operateur supervise et decide :
-corridor, imposer un itineraire, radio, resoudre. Rien d'autre.
+    - CACU (15/191)          : appels d'urgence -> dispatch automatique ;
+    - voirie / gendarmerie   : ROAD_BLOCKED (accidents, effondrements...) ;
+    - capteurs meteo REELS   : Open-Meteo sur les 4 zones, seuils 25/40 mm
+                               + vent, auto-declenchement HEAVY_RAIN avec
+                               cooldown, lectures stockees (sensor_readings) ;
+    - SIEM/EDR virtualise    : CYBER_ATTACK au format SIEM (src_ip, outil) ;
+    - SCADA virtualise       : POWER_FAILURE probabiliste.
 
-GET  /integration/stream -> statut du flux
-POST /integration/stream {"action": "pause"|"resume"}   (resecours manuel)
+Les incidents enrichis se resorbent d'eux-memes (auto-resolution) : la
+ville vit, se blesse et se repare seule. L'operateur supervise et decide
+(corridor, imposer un itineraire, radio, resoudre). Rien d'autre.
+
+GET  /integration/stream -> statut du flux + statistiques
+POST /integration/stream {"action": "pause"|"resume"}
 """
 
 import random
 import threading
 import time
-from datetime import datetime, timezone
+import json
+import urllib.request
+from datetime import datetime, timedelta, timezone
 
+from app.db.mongo_client import mongo_client
 from app.db.neo4j_client import neo4j_client
 from app.services import dispatcher
 
+# ----- rythmes du monde -----
 CALL_EVERY = (35, 90)        # intervalle entre appels d'urgence (s)
 INCIDENT_EVERY = (110, 240)  # intervalle entre incidents (s)
+WEATHER_EVERY = 75           # lecture des capteurs meteo (s)
 RESOLVE_AFTER = (150, 360)   # duree de vie d'un incident (s)
+
+# ----- seuils meteo (cahier des charges, section 9) -----
+RAIN_CRITICAL_MM = 40.0
+RAIN_HIGH_MM = 25.0
+WIND_CRITICAL_KMH = 60.0
+WIND_HIGH_KMH = 40.0
+COOLDOWN_METEO = timedelta(minutes=90)
+
+# Les zones du graphe avec leurs coordonnees reelles
+SENSORS = [
+    {"sensor_id": "weather_01", "zone": "Z1", "zone_name": "Tunis Centre", "lat": 36.80, "lon": 10.18},
+    {"sensor_id": "weather_02", "zone": "Z2", "zone_name": "La Marsa", "lat": 36.87, "lon": 10.30},
+    {"sensor_id": "weather_03", "zone": "Z3", "zone_name": "L ARIANA", "lat": 36.86, "lon": 10.20},
+    {"sensor_id": "weather_04", "zone": "Z4", "zone_name": "Ben Arous", "lat": 36.75, "lon": 10.23},
+]
+
+# ----- alertes cyber SIEM/EDR -----
+CYBER_TYPES = ["RANSOMWARE", "DDOS", "DATA_EXFILTRATION", "PHISHING", "BRUTE_FORCE"]
+CYBER_TOOLS = ["nids", "edr-agent", "wazuh", "suricata"]
+CYBER_SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+CYBER_WEIGHTS = [4, 3, 2, 1]  # CRITICAL rare (1 tirage sur 10)
+
+TECH_TARGETS = [f"P{i}" for i in range(1, 6)] + [f"T{i}" for i in range(1, 11)]
+
 
 _thread: threading.Thread | None = None
 _stop = threading.Event()
 _pause = threading.Event()
 _lock = threading.Lock()
-_stats = {"calls": 0, "incidents": 0, "resolved": 0, "rejets": 0}
+_stats = {"calls": 0, "incidents": 0, "resolved": 0, "alertes_meteo": 0, "rejets": 0}
 _pending: list[tuple[str, float]] = []  # (event_id, expires_at)
 _started_at: str | None = None
 
@@ -57,6 +92,8 @@ def _push_call():
         print(f"[sources] appel rate : {exc}")
 
 
+# ================================== voirie ==================================
+
 def _pick_road() -> str | None:
     rows = neo4j_client.query(
         "MATCH (r:Road {status: 'CLEAR'}) RETURN r.id AS id ORDER BY rand() LIMIT 5"
@@ -64,22 +101,128 @@ def _pick_road() -> str | None:
     return random.choice(rows)["id"] if rows else None
 
 
-def _pick_zone() -> str | None:
-    rows = neo4j_client.query(
-        "MATCH (z:Zone) RETURN z.id AS id ORDER BY rand() LIMIT 3"
+def _push_road_incident():
+    rid = _pick_road()
+    if not rid:
+        return
+    severity = "CRITICAL" if random.random() < 0.35 else "HIGH"
+    reason = random.choice([
+        "accident de la route", "effondrement de pilier", "manifestation",
+        "fuite de gaz", "eau sur la chaussee", "camion renverse",
+    ])
+    event_id = _create_event(
+        "ROAD_BLOCKED", severity, rid, f"Flux agence : {reason}"
     )
-    return random.choice(rows)["id"] if rows else None
+    _register(event_id)
 
 
-def _pick_infra(kinds: tuple[str, ...]) -> str | None:
-    rows = neo4j_client.query(
-        "MATCH (n:Infrastructure) WHERE n.kind IN $kinds RETURN n.id AS id ORDER BY rand() LIMIT 3",
-        {"kinds": list(kinds)},
+# ================================== meteo ===================================
+
+def fetch_weather(lat: float, lon: float) -> dict:
+    url = (
+        "https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        "&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m"
+        "&timezone=Africa/Tunis"
     )
-    return random.choice(rows)["id"] if rows else None
+    with urllib.request.urlopen(url, timeout=10) as resp:
+        payload = json.loads(resp.read().decode("utf-8"))
+    return payload.get("current", {})
 
 
-def _create_event(etype: str, severity: str, target_id: str, description: str) -> str | None:
+def weather_risk(current: dict) -> tuple[str, str | None]:
+    """Traduit une mesure meteo reelle en (severity, event_type | None)."""
+    rain = current.get("precipitation") or 0.0
+    wind = current.get("wind_speed_10m") or 0.0
+    if rain >= RAIN_CRITICAL_MM or wind >= WIND_CRITICAL_KMH:
+        return "CRITICAL", "HEAVY_RAIN"
+    if rain >= RAIN_HIGH_MM or wind >= WIND_HIGH_KMH:
+        return "HIGH", "HEAVY_RAIN"
+    return "LOW", None
+
+
+def _in_cooldown(zone_id: str) -> bool:
+    since = datetime.now(timezone.utc) - COOLDOWN_METEO
+    return mongo_client._db.events.count_documents(
+        {"type": "HEAVY_RAIN", "target_id": zone_id, "timestamp": {"$gte": since}}
+    ) > 0
+
+
+def _weather_tick():
+    """Lecture reelle des 4 capteurs ; HEAVY_RAIN automatique aux seuils."""
+    for sensor in SENSORS:
+        try:
+            current = fetch_weather(sensor["lat"], sensor["lon"])
+        except Exception as exc:
+            print(f"[sources] capteur {sensor['sensor_id']} : echec meteo ({exc})")
+            continue
+
+        reading = {
+            "sensor_id": sensor["sensor_id"],
+            "zone": sensor["zone"],
+            "zone_name": sensor["zone_name"],
+            "temperature_c": current.get("temperature_2m"),
+            "rainfall_mm": current.get("precipitation"),
+            "humidity_pct": current.get("relative_humidity_2m"),
+            "wind_kmh": current.get("wind_speed_10m"),
+            "source": "open-meteo",
+            "timestamp": _utc_now(),
+        }
+        mongo_client._db.sensor_readings.insert_one(reading)
+
+        severity, event_type = weather_risk(current)
+        if event_type and not _in_cooldown(sensor["zone"]):
+            event_id = _create_event(
+                event_type, severity, sensor["zone"],
+                f"Meteo reelle zone {sensor['zone_name']} : "
+                f"{reading.get('rainfall_mm')} mm/h, vent {reading.get('wind_kmh')} km/h",
+            )
+            _register(event_id)
+            _stats["alertes_meteo"] += 1
+            print(
+                f"[sources] meteo REELLE : HEAVY_RAIN {severity} sur "
+                f"{sensor['zone_name']} ({reading.get('rainfall_mm')} mm/h)"
+            )
+
+
+# ================================ cyber / tech ===============================
+
+def _push_cyber():
+    target = random.choice(
+        [f"P{i}" for i in range(1, 6)] + [f"H{i}" for i in range(1, 6)]
+        + [f"T{i}" for i in range(1, 11)] + ["W1", "W2", "W3"]
+    )
+    severity = random.choices(CYBER_SEVERITIES, weights=CYBER_WEIGHTS)[0]
+    attack = random.choice(CYBER_TYPES)
+    event_id = _create_event(
+        "CYBER_ATTACK", severity, target,
+        f"Alerte SIEM : {attack} contre {target}",
+        payload={
+            "source": "virtual-siem",
+            "tool": random.choice(CYBER_TOOLS),
+            "src_ip": f"10.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(1, 254)}",
+        },
+    )
+    _register(event_id)
+
+
+def _push_tech():
+    target = random.choice(TECH_TARGETS)
+    severity = random.choices(["HIGH", "CRITICAL"], weights=[6, 4])[0]
+    event_id = _create_event(
+        "POWER_FAILURE", severity, target,
+        f"Défaillance technique simulée sur {target}",
+        payload={"source": "virtual-scada", "component": "transformer"},
+    )
+    _register(event_id)
+
+
+# ============================== noyau du flux ===============================
+
+def _create_event(
+    etype: str, severity: str, target_id: str, description: str,
+    payload: dict | None = None,
+) -> str | None:
     from app.models.event import EventCreate
     from app.routes.events import create_event
 
@@ -89,7 +232,7 @@ def _create_event(etype: str, severity: str, target_id: str, description: str) -
             severity=severity,
             target_id=target_id,
             description=description,
-            payload={"source": "flux-automatique"},
+            payload=payload or {"source": "flux-automatique"},
         ))
         return result["id"]
     except Exception as exc:
@@ -97,35 +240,25 @@ def _create_event(etype: str, severity: str, target_id: str, description: str) -
         return None
 
 
-def _push_incident():
-    roulette = random.random()
-    if roulette < 0.70:
-        rid = _pick_road()
-        if not rid:
-            return
-        severity = "CRITICAL" if random.random() < 0.35 else "HIGH"
-        reason = random.choice([
-            "accident de la route", "effondrement de pilier", "manifestation",
-            "fuite de gaz", "eau sur la chaussee", "camion renverse",
-        ])
-        event_id = _create_event("ROAD_BLOCKED", severity, rid, f"Flux agence : {reason}")
-    elif roulette < 0.85:
-        zid = _pick_zone()
-        if not zid:
-            return
-        event_id = _create_event("HEAVY_RAIN", "HIGH", zid, "Flux meteo : orage violent sur la zone")
-    else:
-        tid = _pick_infra(("Hospital", "PowerStation", "TelecomTower", "Warehouse"))
-        if not tid:
-            return
-        event_id = _create_event("CYBER_ATTACK", "HIGH", tid, "Flux ANR : tentative d'intrusion")
-
+def _register(event_id: str | None):
+    """Enregistre un incident pour sa resolution automatique."""
     if not event_id:
         return
     _stats["incidents"] += 1
     with _lock:
         _pending.append((event_id, _now() + random.uniform(*RESOLVE_AFTER)))
     print(f"[sources] incident #{_stats['incidents']} pousse ({event_id[:8]})")
+
+
+def _push_incident():
+    """Roulette des incidents NON meteo : voirie domine, SIEM/SCADA ensuite."""
+    roulette = random.random()
+    if roulette < 0.65:
+        _push_road_incident()
+    elif roulette < 0.85:
+        _push_cyber()
+    else:
+        _push_tech()
 
 
 def _resolve_expired():
@@ -146,10 +279,11 @@ def _resolve_expired():
 
 
 def _loop():
-    print("[sources] flux automatique demarre")
-    clock = 0.0                      # temps du flux (gele pendant la pause)
+    print("[sources] flux automatique demarre (appels + voirie + SIEM + SCADA)")
+    clock = 0.0                       # temps du flux (gele pendant la pause)
     next_call = random.uniform(*CALL_EVERY)
     next_incident = random.uniform(*INCIDENT_EVERY)
+    next_weather = WEATHER_EVERY
 
     while not _stop.is_set():
         _stop.wait(0.5)
@@ -164,6 +298,13 @@ def _loop():
         if clock >= next_incident:
             _push_incident()
             next_incident = clock + random.uniform(*INCIDENT_EVERY)
+
+        if clock >= next_weather:
+            try:
+                _weather_tick()
+            except Exception as exc:
+                print(f"[sources] tour meteo ratee : {exc}")
+            next_weather = clock + WEATHER_EVERY
 
         _resolve_expired()
 
