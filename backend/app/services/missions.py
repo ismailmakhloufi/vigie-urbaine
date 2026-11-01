@@ -11,7 +11,7 @@ La position du vehicule est simulee : il progresse le long du trajet
 """
 
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.db.mongo_client import mongo_client
 from app.services.routing import _active_dynamic_state, compute_route
@@ -83,7 +83,7 @@ def _next_mission_id() -> str:
     return f"M-{mongo_client.count_missions() + 1:02d}"
 
 
-def create_mission(origin_id: str, destination_id: str, profile: str, caller_note: str = "") -> dict:
+def create_mission(origin_id: str, destination_id: str, profile: str, caller_note: str = "", vehicle: str | None = None) -> dict:
     """L'appel arrive : calcul du trajet optimal a l'instant T + depart."""
     route = compute_route(origin_id, destination_id, profile)
 
@@ -94,6 +94,7 @@ def create_mission(origin_id: str, destination_id: str, profile: str, caller_not
         "destination_id": destination_id,
         "destination_name": route["destination_name"],
         "profile": profile,
+        "vehicle": vehicle,
         "caller_note": caller_note,
         "status": "EN_ROUTE",
         "route": route["route"],
@@ -106,21 +107,33 @@ def create_mission(origin_id: str, destination_id: str, profile: str, caller_not
         "departure_at": _now(),
         "timeline": [],
     }
+    label = f"{vehicle or 'Convoi'}"
     _log(doc, "CALL", f"Appel reçu : {route['origin_name']} → {route['destination_name']}")
     _log(
         doc,
         "DEPART",
-        f"Départ {route['origin_name']} · ETA {route['estimated_time_min']} min · "
+        f"Départ {label} depuis {route['origin_name']} · ETA {route['estimated_time_min']} min · "
         + " › ".join(route["route_names"]),
     )
     mongo_client.insert_mission(doc)
     return doc
 
 
+def _release_vehicle(doc: dict, status: str = "AVAILABLE"):
+    """Boucle fermee : le vehicule redevient disponible au terme de sa mission."""
+    if not doc.get("vehicle"):
+        return
+    from app.services.fleet import release
+
+    release(doc["mission_id"], doc.get("position") or None, status)
+
+
 def _tick_mission(doc: dict) -> dict:
     """Avance le vehicule, deroute si une route devant lui est bloquee."""
     if doc["status"] not in ("EN_ROUTE", "DIVERTED"):
         return doc
+
+    _maybe_end_corridor(doc)
 
     now = _now()
     departure = doc["departure_at"]
@@ -141,6 +154,7 @@ def _tick_mission(doc: dict) -> dict:
             "position": doc["position"],
             "timeline": doc["timeline"],
         })
+        _release_vehicle(doc)
         return doc
 
     path = doc.get("path") or []
@@ -177,6 +191,8 @@ def _tick_mission(doc: dict) -> dict:
                 break
             except (LookupError, RuntimeError):
                 continue
+
+        if new_route is None:
             doc["status"] = "BLOCKED"
             _log(
                 doc,
@@ -189,6 +205,7 @@ def _tick_mission(doc: dict) -> dict:
                 "position": position,
                 "timeline": doc["timeline"],
             })
+            _release_vehicle(doc)
             return doc
 
         remaining_min = int(round(elapsed_min + new_route["estimated_time_min"]))
@@ -232,6 +249,129 @@ def _tick_mission(doc: dict) -> dict:
     return doc
 
 
+def radio(mission_id: str, author: str, text: str) -> dict | None:
+    """Canal radio : le commandement ou le conducteur parlent dans le journal."""
+    doc = mongo_client.get_mission(mission_id)
+    if not doc:
+        return None
+    code = "RADIO_CMD" if author == "CMD" else "RADIO_DRV"
+    prefix = "📻 Commandement : " if author == "CMD" else "🎙 Conducteur : "
+    _log(doc, code, prefix + text)
+    mongo_client.update_mission(mission_id, {"timeline": doc["timeline"]})
+    return doc
+
+
+def choose_route(mission_id: str, variant: str) -> dict:
+    """Le commandement impose une variante d'itineraire (comparateur)."""
+    doc = mongo_client.get_mission(mission_id)
+    if not doc:
+        raise LookupError(f"mission {mission_id} introuvable")
+    if doc["status"] not in ("EN_ROUTE", "DIVERTED"):
+        raise RuntimeError(f"mission terminée ({doc['status']}) — changement impossible")
+
+    # reprise depuis le troncon courant vers la destination
+    from app.services.routing import compute_route
+
+    cur_road = doc["route"][0]
+    new_route = compute_route(cur_road, doc["destination_id"], doc["profile"], mode=variant)
+    labels = {"FAST": "🟢 RAPIDE", "SHORT": "🔵 COURT", "SAFE": "🟠 SÛR"}
+    now = _now()
+    doc.update({
+        "route": new_route["route"],
+        "route_names": new_route["route_names"],
+        "avoided": new_route["avoided"],
+        "distance_km": new_route["distance_km"],
+        "eta_min": new_route["estimated_time_min"],
+        "path": new_route.get("path", []),
+        "road_offsets": new_route.get("road_offsets", []),
+        "departure_at": now,
+        "position": doc.get("position") or [],
+        "progress": 0.0,
+    })
+    _log(
+        doc,
+        "REROUTE",
+        f"🧑‍✈️ Itinéraire {labels.get(variant, variant)} imposé par le commandement : "
+        + " › ".join(new_route["route_names"]),
+    )
+    mongo_client.update_mission(mission_id, {
+        "route": doc["route"],
+        "route_names": doc["route_names"],
+        "avoided": doc["avoided"],
+        "distance_km": doc["distance_km"],
+        "eta_min": doc["eta_min"],
+        "path": doc["path"],
+        "road_offsets": doc["road_offsets"],
+        "departure_at": doc["departure_at"],
+        "timeline": doc["timeline"],
+    })
+    return doc
+
+
+def activate_corridor(mission_id: str, minutes: int = 3) -> dict:
+    """Gyrophare : perce la congestion sur son itinéraire pour N minutes."""
+    doc = mongo_client.get_mission(mission_id)
+    if not doc:
+        raise LookupError(f"mission {mission_id} introuvable")
+    if doc["status"] not in ("EN_ROUTE", "DIVERTED"):
+        raise RuntimeError("mission terminée — corridor inutile")
+
+    from app.services.routing import compute_route
+
+    cur_road = doc["route"][0]
+    new_route = compute_route(cur_road, doc["destination_id"], doc["profile"], corridor=True)
+    now = _now()
+    doc.update({
+        "route": new_route["route"],
+        "route_names": new_route["route_names"],
+        "avoided": new_route["avoided"],
+        "distance_km": new_route["distance_km"],
+        "eta_min": new_route["estimated_time_min"],
+        "path": new_route.get("path", []),
+        "road_offsets": new_route.get("road_offsets", []),
+        "departure_at": now,
+        "progress": 0.0,
+        "corridor_until": _iso(now + timedelta(minutes=minutes)),
+    })
+    _log(
+        doc,
+        "CORRIDOR",
+        f"🚨 {doc.get('vehicle') or 'Convoi'} : CORRIDOR PRIORITAIRE activé "
+        f"({minutes} min) — le gyrophare perce la congestion via "
+        + " › ".join(new_route["route_names"]),
+    )
+    mongo_client.update_mission(mission_id, {
+        "route": doc["route"],
+        "route_names": doc["route_names"],
+        "avoided": doc["avoided"],
+        "distance_km": doc["distance_km"],
+        "eta_min": doc["eta_min"],
+        "path": doc["path"],
+        "road_offsets": doc["road_offsets"],
+        "departure_at": doc["departure_at"],
+        "corridor_until": doc["corridor_until"],
+        "timeline": doc["timeline"],
+    })
+    return doc
+
+
+def _maybe_end_corridor(doc: dict):
+    until = doc.get("corridor_until")
+    if not until or doc["status"] in ("ARRIVED", "BLOCKED", "CANCELLED"):
+        return
+    if isinstance(until, str):
+        try:
+            until = datetime.fromisoformat(until)
+        except ValueError:
+            return
+    if until.tzinfo is None:
+        until = until.replace(tzinfo=timezone.utc)
+    if _now() >= until:
+        doc["corridor_until"] = None
+        _log(doc, "CORRIDOR", "🚨 Corridor prioritaire terminé — situation rétablie")
+        mongo_client.update_mission(doc["mission_id"], {"corridor_until": None, "timeline": doc["timeline"]})
+
+
 def list_missions(limit: int = 30) -> list[dict]:
     """Tick toutes les missions actives puis renvoie les instantanes."""
     ticked = {doc["mission_id"]: _tick_mission(doc) for doc in mongo_client.active_missions()}
@@ -256,6 +396,18 @@ def snapshot(doc: dict) -> dict:
         0,
         int(round(doc["eta_min"] * (1 - min(doc.get("progress", 0.0), 1.0)))),
     )
+    corridor_until = doc.get("corridor_until")
+    active = False
+    if corridor_until:
+        try:
+            if isinstance(corridor_until, str):
+                corridor_until = datetime.fromisoformat(corridor_until)
+            if corridor_until.tzinfo is None:
+                corridor_until = corridor_until.replace(tzinfo=timezone.utc)
+            active = _now() < corridor_until
+        except ValueError:
+            active = False
+    out["corridor_active"] = active
     return out
 
 
@@ -266,4 +418,5 @@ def cancel_mission(mission_id: str) -> dict | None:
     doc["status"] = "CANCELLED"
     _log(doc, "CANCEL", "Mission annulée par le commandement")
     mongo_client.update_mission(mission_id, {"status": "CANCELLED", "timeline": doc["timeline"]})
+    _release_vehicle(doc)
     return doc

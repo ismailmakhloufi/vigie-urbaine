@@ -101,7 +101,16 @@ def _load_network(rainy_zone_ids: set[str]):
     return roads, edge_rows
 
 
-def _edge_cost(edge, profile: str, blocked: set, rainy_zones: set, roads: dict) -> float | None:
+def _edge_cost(
+    edge,
+    profile: str,
+    blocked: set,
+    rainy_zones: set,
+    roads: dict,
+    mode: str = "FAST",
+    corridor: bool = False,
+    congestion: dict | None = None,
+) -> float | None:
     dest = edge["dst"]
 
     d_road = roads.get(dest)
@@ -111,11 +120,29 @@ def _edge_cost(edge, profile: str, blocked: set, rainy_zones: set, roads: dict) 
         return None
 
     traffic_w, flood_w, rain_w, time_mult = PROFILE_WEIGHTS[profile]
+
+    if mode == "SHORT":
+        # le plus court en distance : on ignore trafic/inond/pluie
+        return float(edge["km"]) * 1.8
+
+    traffic_w *= 2.5 if mode == "SAFE" else 1.0
+    flood_w *= 2.0 if mode == "SAFE" else 1.0
+
     cost = float(edge["minutes"] or edge["km"] * 2.0) * time_mult
     cost += (edge["traffic"] or 1) * traffic_w
 
+    # trafic vivant : la congestion qui nait des incidents d'aujourd'hui
+    if congestion:
+        cost += congestion.get(dest, 0) * traffic_w
+    if congestion and corridor:
+        # corridor prioritaire : le gyrophare brise la file
+        cost -= congestion.get(dest, 0) * traffic_w
+
     flood_level = d_road["flood"]
-    if flood_level >= 4:
+    if mode == "SAFE" and flood_level >= 3:
+        # le mode SUR refuse par principe les rues a risque meme sans pluie
+        cost += flood_w * (flood_level - 2)
+    if rainy_zones and flood_level >= 3:
         cost += flood_w * (flood_level - 3)
     if rainy_zones and d_road["zone_id"] in rainy_zones:
         cost += rain_w
@@ -181,13 +208,32 @@ def _access_road(infra_id: str, blocked: set) -> tuple[str | None, float]:
     return best_id, round(max(best_min, 1.0), 1)
 
 
-def compute_route(origin_id: str, destination_id: str, profile: str = "AMBULANCE") -> dict:
+def compute_route(
+    origin_id: str,
+    destination_id: str,
+    profile: str = "AMBULANCE",
+    mode: str = "FAST",
+    corridor: bool = False,
+) -> dict:
     roads, edges = _load_network(set())
     blocked, rainy_zones, notes = _active_dynamic_state()
 
     for rid, meta in roads.items():
         if meta["status"] == "BLOCKED":
             blocked.add(rid)
+
+    # trafic vivant (phase "embouteillage qui nait du chaos")
+    from app.services.traffic import congestion_map
+
+    congestion = congestion_map()
+    if mode in ("FAST", "SAFE"):
+        congested = [rid for rid, bump in congestion.items() if bump >= 2]
+        if congested:
+            from app.services.traffic import describe
+            notes.append(
+                f"trafic vivant pris en compte : "
+                + ", ".join(f"{rid} ({describe(congestion[rid])})" for rid in congested[:5])
+            )
 
     origin_kind_rows = neo4j_client.query(
         "MATCH (n:Infrastructure {id: $id}) RETURN n.name AS name, n.kind AS kind",
@@ -221,7 +267,7 @@ def compute_route(origin_id: str, destination_id: str, profile: str = "AMBULANCE
             continue
         if roads.get(dst, {}).get("status") == "BLOCKED":
             continue
-        cost = _edge_cost(edge, profile, blocked, rainy_zones, roads)
+        cost = _edge_cost(edge, profile, blocked, rainy_zones, roads, mode=mode, corridor=corridor, congestion=congestion)
         if cost is None:
             continue
         adj.setdefault(src, []).append((dst, edge, cost))
@@ -339,5 +385,36 @@ def compute_route(origin_id: str, destination_id: str, profile: str = "AMBULANCE
         "dynamic_notes": notes,
         "path": full_path,
         "road_offsets": road_offsets,
+        "mode": mode,
         "computed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+VARIANTS = [("FAST", "Rapide"), ("SHORT", "Court"), ("SAFE", "Sûr")]
+
+
+def compute_route_options(origin_id: str, destination_id: str, profile: str = "AMBULANCE") -> dict:
+    """Le comparateur du commandement : 3 propositions côte à côte."""
+    from app.services.traffic import describe
+
+    options = []
+    for mode, label in VARIANTS:
+        try:
+            route = compute_route(origin_id, destination_id, profile, mode=mode)
+        except (LookupError, RuntimeError):
+            continue
+        options.append({
+            "variant": mode,
+            "label": label,
+            "estimated_time_min": route["estimated_time_min"],
+            "distance_km": route["distance_km"],
+            "route": route["route"],
+            "route_names": route["route_names"],
+            "path": route.get("path", []),
+        })
+    return {
+        "origin_id": origin_id,
+        "destination_id": destination_id,
+        "profile": profile,
+        "options": options,
     }

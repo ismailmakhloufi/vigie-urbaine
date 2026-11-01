@@ -52,10 +52,12 @@ export default function MapView({
   riskById = {},
   itineraires = [],
   missions = [],
+  options = [],
 }) {
   const carte = useRef(null);
   const couche = useRef(null);
   const coucheMissions = useRef(null);
+  const coucheVariantes = useRef(null);
   const markers = useRef({});
 
   useEffect(() => {
@@ -74,6 +76,7 @@ export default function MapView({
 
     couche.current = L.layerGroup().addTo(carte.current);
     coucheMissions.current = L.layerGroup().addTo(carte.current);
+    coucheVariantes.current = L.layerGroup().addTo(carte.current);
 
     const resize = () => carte.current?.invalidateSize();
     setTimeout(resize, 150);
@@ -342,7 +345,8 @@ export default function MapView({
         .addTo(layer)
         .bindPopup(
           `<div class="map-popup">` +
-            `<b>🚨 Mission ${mission.mission_id} · ${mission.profile}</b><br>` +
+            `<b>${mission.corridor_active ? "🚨 " : ""}Mission ${mission.mission_id} · ${mission.profile}</b><br>` +
+            `${mission.vehicle ? `Véhicule <b>${mission.vehicle}</b> · ` : ""}` +
             `${mission.origin_name} → ${mission.destination_name}<br>` +
             `${(mission.progress * 100).toFixed(0)}% · ETA ${mission.remaining_min} min` +
           `</div>`
@@ -350,10 +354,12 @@ export default function MapView({
 
       const [lat, lon] = mission.position || [];
       if (lat != null && lon != null) {
+        const emoji = mission.profile === "SUPPLY" ? "🚚" : "🚑";
         L.marker([lat, lon], {
+          zIndexOffset: 700,
           icon: L.divIcon({
             className: "ub-vehicle-icon",
-            html: `<div class="ub-vehicle" style="--c:${couleur}">🚑</div>`,
+            html: `<div class="ub-vehicle${mission.corridor_active ? " sirene" : ""}" style="--c:${couleur}">${emoji}</div>`,
             iconSize: [30, 30],
             iconAnchor: [15, 15],
           }),
@@ -361,6 +367,47 @@ export default function MapView({
       }
     }
   }, [missions]);
+
+  // ----- les 3 variantes du comparateur (FAST / SHORT / SAFE) -----
+  useEffect(() => {
+    const layer = coucheVariantes.current;
+    if (!layer) return;
+    layer.clearLayers();
+
+    const couleurs = { FAST: "#34d399", SHORT: "#60a5fa", SAFE: "#fb923c" };
+
+    for (const option of options) {
+      const path = option.path || [];
+      if (path.length < 4) continue;
+
+      const latlngs = toLatLngs(path);
+      const couleur = couleurs[option.variant] || "#a78bfa";
+      const label = { FAST: "🟢 Rapide", SHORT: "🔵 Court", SAFE: "🟠 Sûr" }[option.variant] || option.variant;
+
+      L.polyline(latlngs, {
+        color: couleur,
+        weight: 9,
+        opacity: 0.1,
+        lineCap: "round",
+      }).addTo(layer);
+
+      L.polyline(latlngs, {
+        color: couleur,
+        weight: 2.6,
+        opacity: 0.9,
+        dashArray: "10 8",
+        lineCap: "round",
+      })
+        .addTo(layer)
+        .bindPopup(
+          `<div class="map-popup">` +
+            `<b>${label} — variante ${option.variant}</b><br>` +
+            `${option.estimated_time_min} min · ${option.distance_km} km<br>` +
+            `${option.route_names?.join(" › ") || ""}` +
+          `</div>`
+        );
+    }
+  }, [options]);
 
   return (
     <>

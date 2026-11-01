@@ -12,6 +12,16 @@ import {
   postWhatif,
   resolveEvent,
   getMissions,
+  getFleet,
+  getCalls,
+  getDemo,
+  postDemo,
+  postRandomCall,
+  postRouteOptions,
+  postCorridor,
+  postRadio,
+  postChooseRoute,
+  cancelMission,
 } from "./api.js";
 
 const TYPES_INCIDENT = [
@@ -63,6 +73,24 @@ const STATUS_MISSION = {
   CANCELLED: { label: "ANNULÉE", classe: "m-cancelled" },
 };
 
+const STATUT_FLOTTE = {
+  AVAILABLE: { label: "DISPO", classe: "f-dispo" },
+  ON_MISSION: { label: "EN MISSION", classe: "f-mission" },
+  OUT_OF_SERVICE: { label: "HORS SERVICE", classe: "f-hs" },
+};
+
+const EMOJI_TYPE = {
+  AMBULANCE: "🚑",
+  SUPPLY: "🚚",
+  NORMAL: "🚙",
+};
+
+const EMOJI_VEHICULE = {
+  MEDICAL: "🚑",
+  AMBULANCE: "🚑",
+  SUPPLY: "🚚",
+};
+
 function RiskBadge({ risk }) {
   return <span className={`risk-badge risk-${(risk || "LOW").toLowerCase()}`}>{risk || "LOW"}</span>;
 }
@@ -87,20 +115,31 @@ export default function App() {
   const [chatBusy, setChatBusy] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [missions, setMissions] = useState([]);
+  const [flotte, setFlotte] = useState([]);
+  const [appels, setAppels] = useState([]);
+  const [demo, setDemo] = useState(null);
+  const [comparateur, setComparateur] = useState(null);
   const chatLog = useRef(null);
 
   const refresh = async () => {
     try {
-      const [infraData, riskData, eventsData, missionsData] = await Promise.all([
-        getInfrastructure(),
-        getRisk(),
-        getEvents(20),
-        getMissions(),
-      ]);
+      const [infraData, riskData, eventsData, missionsData, flotteData, appelsData, demoData] =
+        await Promise.all([
+          getInfrastructure(),
+          getRisk(),
+          getEvents(20),
+          getMissions(),
+          getFleet(),
+          getCalls(8),
+          getDemo(),
+        ]);
       setInfra(infraData);
       setRisque(riskData);
       setHistorique(eventsData);
       setMissions(missionsData);
+      setFlotte(flotteData);
+      setAppels(appelsData);
+      setDemo(demoData);
       setErreur(null);
     } catch (exc) {
       setErreur(`Backend injoignable : ${exc.message}`);
@@ -278,6 +317,90 @@ export default function App() {
     }
   };
 
+  // ----- console dispatcher -----
+
+  const typeVehicule = (callsign) =>
+    flotte.find((v) => v.callsign === callsign)?.type || "AMBULANCE";
+
+  const appelAleatoire = async () => {
+    try {
+      const appel = await postRandomCall();
+      setToast(`📞 Appel ${appel.call_id} pris en charge : ${appel.assigned_vehicle} part en mission`);
+      await refresh();
+    } catch (exc) {
+      setToast(`⛔ ${exc.message}`);
+    }
+  };
+
+  const basculerDemo = async () => {
+    try {
+      const action = demo?.running ? "stop" : "start";
+      await postDemo(action);
+      setToast(action === "start" ? "🎬 Scénario de démo lancé (5 actes)" : "🎬 Démo arrêtée");
+      await refresh();
+    } catch (exc) {
+      setToast(`⛔ ${exc.message}`);
+    }
+  };
+
+  const activerCorridor = async (mission) => {
+    try {
+      await postCorridor(mission.mission_id, 3);
+      setToast(`🚨 Corridor prioritaire activé pour ${mission.vehicle || "le convoi"}`);
+      await refresh();
+    } catch (exc) {
+      setToast(`⛔ ${exc.message}`);
+    }
+  };
+
+  const envoyerRadio = async (mission) => {
+    try {
+      await postRadio(
+        mission.mission_id,
+        "CMD",
+        `Soyez prudent sur ${mission.route_names?.[0] || "votre axe"}, trafic dégradé.`
+      );
+      setToast(`📻 Radio transmise à ${mission.vehicle || "le convoi"}`);
+      await refresh();
+    } catch (exc) {
+      setToast(`⛔ ${exc.message}`);
+    }
+  };
+
+  const comparerItineraires = async (mission) => {
+    if (!mission.origin_id) {
+      setToast("⛔ Ancienne mission : comparateur indisponible");
+      return;
+    }
+    try {
+      const offre = await postRouteOptions(mission.origin_id, mission.destination_id, mission.profile);
+      setComparateur({ missionId: mission.mission_id, ...offre });
+    } catch (exc) {
+      setToast(`⛔ ${exc.message}`);
+    }
+  };
+
+  const imposerVariante = async (missionId, variant) => {
+    try {
+      await postChooseRoute(missionId, variant);
+      setToast(`🧑‍✈️ Variante ${variant} imposée au véhicule`);
+      setComparateur(null);
+      await refresh();
+    } catch (exc) {
+      setToast(`⛔ ${exc.message}`);
+    }
+  };
+
+  const annuler = async (missionId) => {
+    try {
+      await cancelMission(missionId);
+      setToast("✕ Mission annulée, véhicule relâché");
+      await refresh();
+    } catch (exc) {
+      setToast(`⛔ ${exc.message}`);
+    }
+  };
+
   return (
     <div className="app app-v2">
       <header className="header">
@@ -337,6 +460,62 @@ export default function App() {
                 <small>Cliquez sur un nœud de la carte.</small>
               </>
             )}
+          </div>
+        </section>
+
+        <section className="dispatcher-panel">
+          <div className="section-titre">Poste de commandement</div>
+
+          <div className="dispatcher-actions">
+            <button className="btn btn-dispatch" onClick={appelAleatoire}>
+              📞 Appel entrant
+            </button>
+            <button
+              className={`btn ${demo?.running ? "btn-demo-stop" : "btn-demo"}`}
+              onClick={basculerDemo}
+            >
+              {demo?.running ? "⏹ Démo en cours" : "🎬 Lancer la démo"}
+            </button>
+          </div>
+
+          <div className="flotte-liste">
+            {flotte.length === 0 && (
+              <div className="empty-state">Flotte non encore enregistrée.</div>
+            )}
+            {flotte.map((v) => {
+              const st = STATUT_FLOTTE[v.status] || STATUT_FLOTTE.AVAILABLE;
+              return (
+                <div className={`flotte-row ${st.classe}`} key={v.callsign}>
+                  <span className="flotte-emoji">{EMOJI_TYPE[v.type] || "🚙"}</span>
+                  <span className="flotte-nom">
+                    <b>{v.callsign}</b>
+                    <small>{v.type}</small>
+                  </span>
+                  <span className="flotte-statut">{st.label}</span>
+                  <small className="flotte-mission">{v.mission_id || "—"}</small>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="section-titre" style={{ marginTop: 10 }}>
+            Standard d'urgence
+          </div>
+          <div className="appels-liste">
+            {appels.length === 0 && (
+              <div className="empty-state">Aucun appel reçu.</div>
+            )}
+            {appels.slice(0, 5).map((a) => (
+              <div className="appel-row" key={a.call_id}>
+                <b>{a.call_id}</b>
+                <span>{a.kind === "SUPPLY" ? "📦 logistique" : "🚑 médical"}</span>
+                <small>→ {a.destination_id}</small>
+                <span className={`appel-statut s-${(a.status || "").toLowerCase()}`}>
+                  {a.status === "DISPATCHED" ? "✓ assigné" : a.status}
+                </span>
+                <small>{a.assigned_vehicle || a.note || ""}</small>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -421,6 +600,99 @@ export default function App() {
             ))
           )}
         </section>
+
+        <section className="missions-panel">
+          <div className="section-titre">Missions en cours ({missionsActives.length})</div>
+          {missionsActives.length === 0 && (
+            <div className="empty-state">Aucun véhicule en mission. La flotte veille.</div>
+          )}
+          {missionsActives.map((m) => (
+            <article className="mission-card" key={m.mission_id}>
+              <div className="mission-head">
+                <span className="mission-vehicule">
+                  {EMOJI_VEHICULE[m.profile] || "🚑"}{" "}
+                  <b>{m.vehicle || "Convoi"}</b>
+                </span>
+                <span className={`mission-statut ${(STATUS_MISSION[m.status] || {}).classe || ""}`}>
+                  {(STATUS_MISSION[m.status] || {}).label || m.status}
+                </span>
+              </div>
+              <div className="mission-lieu">
+                {m.origin_name} → <b>{m.destination_name}</b>
+              </div>
+              <div className="mission-meta">
+                <span><b>{m.mission_id}</b></span>
+                <span>ETA <b>{m.remaining_min ?? "—"} min</b></span>
+                <span>{m.route_names?.length || 0} rues</span>
+                {m.corridor_active && <span className="mission-corridor">🚨 CORRIDOR</span>}
+              </div>
+              <div className="mission-route" title={(m.route_names || []).join(" › ")}>
+                {(m.route || []).join(" › ")}
+              </div>
+
+              <div className="mission-actions">
+                <button
+                  className="btn-mission"
+                  onClick={() => activerCorridor(m)}
+                  disabled={m.corridor_active}
+                  title="Perce la congestion (gyrophare)"
+                >
+                  🚨 Corridor
+                </button>
+                <button
+                  className="btn-mission"
+                  onClick={() => envoyerRadio(m)}
+                  title="Message radio au conducteur"
+                >
+                  📻 Radio
+                </button>
+                <button
+                  className="btn-mission"
+                  onClick={() => comparerItineraires(m)}
+                  title="3 itinéraires proposés"
+                >
+                  🧭 Comparateur
+                </button>
+                <button
+                  className="btn-mission btn-annuler"
+                  onClick={() => annuler(m.mission_id)}
+                  title="Annuler la mission"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {comparateur?.missionId === m.mission_id && (
+                <div className="comparateur">
+                  <div className="section-titre">🧭 3 itinéraires possibles</div>
+                  {comparateur.options.map((o) => (
+                    <div className={`comparateur-row v-${o.variant.toLowerCase()}`} key={o.variant}>
+                      <span className="comp-label">{o.label}</span>
+                      <span className="comp-mesures">
+                        {o.estimated_time_min} min · {o.distance_km} km
+                      </span>
+                      <small className="comp-routes">{o.route_names.join(" › ")}</small>
+                      <button onClick={() => imposerVariante(m.mission_id, o.variant)}>
+                        Imposer
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {m.timeline?.length > 0 && (
+                <div className="mission-journal">
+                  {m.timeline.slice(-2).map((entry, i) => (
+                    <div className="journal-row" key={i}>
+                      <small>{new Date(entry.at).toLocaleTimeString("fr-FR", { hour12: false })}</small>
+                      <span>{entry.message}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </article>
+          ))}
+        </section>
       </aside>
 
       <main className="map-zone">
@@ -433,6 +705,7 @@ export default function App() {
           riskById={riskById}
           itineraires={plan?.detours || []}
           missions={missionsActives}
+          options={comparateur?.options || []}
         />
         {toast && <div className="toast">{toast}</div>}
       </main>

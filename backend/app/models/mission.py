@@ -35,6 +35,7 @@ class MissionSnapshot(BaseModel):
     destination_name: str
     profile: RoutingProfile
     status: MissionStatus
+    vehicle: str | None = None
     caller_note: str = ""
     route: list[str]
     route_names: list[str]
@@ -46,4 +47,5 @@ class MissionSnapshot(BaseModel):
     path: list[float] = []
     progress: float = 0.0
     remaining_min: int = 0
+    corridor_active: bool = False
     timeline: list[TimelineEntry] = []

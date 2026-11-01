@@ -71,6 +71,37 @@ class MongoDbClient:
     def count_missions(self) -> int:
         return self._db.missions.count_documents({})
 
+    # ----- flotte (registry vehicules) -----
+
+    def insert_vehicle(self, vehicle: dict):
+        return self._db.vehicles.update_one(
+            {"callsign": vehicle["callsign"]}, {"$setOnInsert": vehicle}, upsert=True
+        )
+
+    def upsert_vehicle(self, callsign: str, fields: dict):
+        return self._db.vehicles.update_one(
+            {"callsign": callsign}, {"$set": fields}, upsert=True
+        )
+
+    def list_vehicles(self) -> list[dict]:
+        return list(self._db.vehicles.find().sort("callsign", 1))
+
+    def count_vehicles(self) -> int:
+        return self._db.vehicles.count_documents({})
+
+    # ----- appels (centre d'appel) -----
+
+    def insert_call(self, call: dict):
+        return self._db.calls.insert_one(call)
+
+    def update_call(self, call_id: str, fields: dict):
+        return self._db.calls.update_one({"call_id": call_id}, {"$set": fields})
+
+    def list_calls(self, limit: int = 15) -> list[dict]:
+        return list(
+            self._db.calls.find().sort("created_at", -1).limit(limit)
+        )
+
     def close(self):
         self._client.close()
 
