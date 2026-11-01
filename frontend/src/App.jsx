@@ -15,7 +15,6 @@ import {
   getFleet,
   getCalls,
   getStream,
-  postStreamAction,
   postRouteOptions,
   postCorridor,
   postRadio,
@@ -318,17 +317,6 @@ export default function App() {
 
   // ----- console dispatcher -----
 
-  const basculerFlux = async () => {
-    try {
-      const action = flux?.paused ? "resume" : "pause";
-      await postStreamAction(action);
-      setToast(action === "pause" ? "⏸ Flux agences en pause" : "▶ Flux agences repris");
-      await refresh();
-    } catch (exc) {
-      setToast(`⛔ ${exc.message}`);
-    }
-  };
-
   const activerCorridor = async (mission) => {
     try {
       await postCorridor(mission.mission_id, 3);
@@ -459,7 +447,7 @@ export default function App() {
                 {flux?.online
                   ? "Sources agences en direct"
                   : flux?.paused
-                    ? "Flux en pause (relève locale)"
+                    ? "Flux en pause"
                     : "Sources hors ligne"}
               </b>
               <small>
@@ -468,13 +456,6 @@ export default function App() {
                   : "…"}
               </small>
             </div>
-            <button
-              className="flux-toggle"
-              onClick={basculerFlux}
-              title={flux?.paused ? "Reprendre le flux" : "Mettre le flux en pause"}
-            >
-              {flux?.paused ? "▶" : "⏸"}
-            </button>
           </div>
 
           <div className="flotte-liste">

@@ -795,23 +795,6 @@ button { font: inherit; }
 .flux-chip.flux-pause .flux-info b { color: #fef9c3; }
 .flux-info small { color: #6b9c91; font-size: 10px; }
 
-.flux-toggle {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  background: transparent;
-  color: #94a3b8;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.flux-toggle:hover {
-  color: #fff;
-  border-color: var(--cyan);
-  background: rgba(34, 211, 238, 0.08);
-}
-
 /* --- flotte --- */
 .flotte-liste { display: flex; flex-direction: column; gap: 5px; }
 
