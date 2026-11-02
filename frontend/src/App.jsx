@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import MapView from "./components/MapView.jsx";
 import {
+  NATURES_FR,
+  PROFILS_FR,
+  NIVEAUX_FR,
+  ETYPES_FR,
+  ETATS_VILLE_FR,
+  NIVEAU,
+} from "./libelles.js";
+import {
   getInfrastructure,
   getRisk,
   getEvents,
@@ -90,7 +98,11 @@ const EMOJI_VEHICULE = {
 };
 
 function RiskBadge({ risk }) {
-  return <span className={`risk-badge risk-${(risk || "LOW").toLowerCase()}`}>{risk || "LOW"}</span>;
+  return (
+    <span className={`risk-badge risk-${(risk || "LOW").toLowerCase()}`}>
+      {NIVEAU(risk)}
+    </span>
+  );
 }
 
 export default function App() {
@@ -257,7 +269,7 @@ export default function App() {
         const predict = await postWhatif(contenu);
         setPrediction(predict);
         setFantomes(predict.impacts.map((i) => i.id));
-        setToast(`🔮 What-if : ${predict.total_count} impact(s) prédit(s)`);
+        setToast(`🔮 Simulation : ${predict.total_count} impact(s) prédit(s)`);
       } else {
         const resultat = await postEvent(contenu);
         setVagues(
@@ -385,8 +397,8 @@ export default function App() {
         </div>
 
         <div className={`city-status status-${cityStatus.toLowerCase()}`}>
-          <small>CITY STATUS</small>
-          <strong>● {cityStatus}</strong>
+          <small>ÉTAT DE LA VILLE</small>
+          <strong>● {ETATS_VILLE_FR[cityStatus] || cityStatus}</strong>
         </div>
 
         <div className="horloge">
@@ -400,7 +412,7 @@ export default function App() {
           <span>Incidents actifs</span><strong>{kpis.actifs}</strong>
         </div>
         <div className="kpi-horizontal kpi-ambre">
-          <span>Risques HIGH / CRITICAL</span><strong>{kpis.critiques}</strong>
+          <span>Risques ÉLEVÉ / CRITIQUE</span><strong>{kpis.critiques}</strong>
         </div>
         <div className="kpi-horizontal kpi-violet">
           <span>Hôpitaux menacés</span><strong>{kpis.hospitals}</strong>
@@ -491,7 +503,7 @@ export default function App() {
                 <span>{a.kind === "SUPPLY" ? "📦 logistique" : "🚑 médical"}</span>
                 <small>→ {a.destination_id}</small>
                 <span className={`appel-statut s-${(a.status || "").toLowerCase()}`}>
-                  {a.status === "DISPATCHED" ? "✓ assigné" : a.status}
+                  {a.status === "DISPATCHED" ? "✓ assigné" : a.status === "NO_VEHICLE" ? "✗ aucun véhicule" : a.status}
                 </span>
                 <small>{a.assigned_vehicle || a.note || ""}</small>
               </div>
@@ -527,7 +539,7 @@ export default function App() {
             }}
           >
             <span>
-              <span className="nom">MODE WHAT-IF</span>
+              <span className="nom">MODE SIMULATION</span>
               <small>Prévoir sans modifier la ville</small>
             </span>
             <span className={`interrupteur ${modeSimulation ? "on" : ""}`} />
@@ -536,7 +548,7 @@ export default function App() {
 
         {prediction && (
           <section className="whatif-card">
-            <div className="section-titre">Prédiction What-if</div>
+            <div className="section-titre">Projection (simulation)</div>
             <div className="whatif-summary">
               <div><strong>{prediction.total_count}</strong><span>impacts</span></div>
               <div><strong>{prediction.max_depth}</strong><span>profondeur</span></div>
@@ -568,8 +580,8 @@ export default function App() {
             (risque?.incident_list || []).map((incident) => (
               <article className="incident-card" key={incident.event_id}>
                 <div className="incident-head">
-                  <span className="incident-type">{incident.type}</span>
-                  <span>{incident.severity}</span>
+                  <span className="incident-type">{ETYPES_FR[incident.type] || incident.type}</span>
+                  <span>{NIVEAU(incident.severity)}</span>
                 </div>
                 <strong>{incident.target_id}</strong>
                 <small>
@@ -775,8 +787,8 @@ export default function App() {
       <aside className="risk-center">
         <div className="risk-center-header">
           <div>
-            <small>LIVE ANALYSIS</small>
-            <h2>Risk Center</h2>
+            <small>ANALYSE EN DIRECT</small>
+            <h2>Centre de risques</h2>
           </div>
           <span>{nodesAtRisk.length} nœuds</span>
         </div>
@@ -902,7 +914,7 @@ export default function App() {
           {historique.slice(0, 5).map((ev, i) => (
             <div className="history-row" key={ev.id || i}>
               <span>{new Date(ev.timestamp).toLocaleTimeString("fr-FR", { hour12: false })}</span>
-              <b>{ev.type}</b>
+              <b>{ETYPES_FR[ev.type] || ev.type}</b>
               <span>→ {ev.target_id}</span>
               <i className={ev.status === "RESOLVED" ? "resolved" : "active"} />
             </div>
@@ -917,7 +929,7 @@ export default function App() {
         ) : (
           <span>FastAPI · Neo4j · MongoDB · Open-Meteo</span>
         )}
-        <span className="footer-right">Urban Butterfly · NoSQL Digital Twin</span>
+        <span className="footer-right">Urban Butterfly · Jumeau numérique NoSQL</span>
       </footer>
     </div>
   );

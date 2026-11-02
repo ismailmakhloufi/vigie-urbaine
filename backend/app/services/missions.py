@@ -112,7 +112,7 @@ def create_mission(origin_id: str, destination_id: str, profile: str, caller_not
     _log(
         doc,
         "DEPART",
-        f"Départ {label} depuis {route['origin_name']} · ETA {route['estimated_time_min']} min · "
+        f"Départ {label} depuis {route['origin_name']} · arrivée à {route['estimated_time_min']} min · "
         + " › ".join(route["route_names"]),
     )
     mongo_client.insert_mission(doc)

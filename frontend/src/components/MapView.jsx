@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
+import { NATURES_FR, PROFILS_FR, NIVEAUX_FR, STATUTS_FR, NIVEAU } from "../libelles.js";
 
 const COULEURS_STATUT = {
   ONLINE: "#34d399",
@@ -173,11 +174,11 @@ export default function MapView({
           const popupHtml =
             `<div class="map-popup">` +
               `<b>🛣️ ${node.name}</b><br>` +
-              `<span>Road · ${node.id}</span><br>` +
-              `Statut : <b>${node.status || "UNKNOWN"}</b><br>` +
+              `<span>Route · ${node.id}</span><br>` +
+              `Statut : <b>${STATUTS_FR[node.status || "UNKNOWN"] || node.status || "Inconnu"}</b><br>` +
               (risk
-                ? `Risque : <b style="color:${riskColor}">${risk.risk} · ${risk.score}/100</b><br>`
-                : "Risque : LOW / non exposé<br>") +
+                ? `Risque : <b style="color:${riskColor}">${NIVEAU(risk.risk)} · ${risk.score}/100</b><br>`
+                : "Risque : FAIBLE / non exposé<br>") +
               (node.criticality != null ? `Criticité : ${node.criticality}/5<br>` : "") +
             `</div>`;
 
@@ -249,11 +250,11 @@ export default function MapView({
         .bindPopup(
           `<div class="map-popup">` +
             `<b>${EMOJIS_NATURE[node.kind] || "📍"} ${node.name}</b><br>` +
-            `<span>${node.kind} · ${node.id}</span><br>` +
-            `Statut : <b>${node.status || "UNKNOWN"}</b><br>` +
+            `<span>${NATURES_FR[node.kind] || node.kind} · ${node.id}</span><br>` +
+            `Statut : <b>${STATUTS_FR[node.status || "UNKNOWN"] || node.status || "Inconnu"}</b><br>` +
             (risk
-              ? `Risque : <b style="color:${riskColor}">${risk.risk} · ${risk.score}/100</b><br>`
-              : "Risque : LOW / non exposé<br>") +
+              ? `Risque : <b style="color:${riskColor}">${NIVEAU(risk.risk)} · ${risk.score}/100</b><br>`
+              : "Risque : FAIBLE / non exposé<br>") +
             (node.criticality != null ? `Criticité : ${node.criticality}/5<br>` : "") +
             (node.backup_power_hours != null
               ? `Secours : ${node.backup_power_hours} h<br>`
@@ -345,10 +346,10 @@ export default function MapView({
         .addTo(layer)
         .bindPopup(
           `<div class="map-popup">` +
-            `<b>${mission.corridor_active ? "🚨 " : ""}Mission ${mission.mission_id} · ${mission.profile}</b><br>` +
+            `<b>${mission.corridor_active ? "🚨 " : ""}Mission ${mission.mission_id} · ${PROFILS_FR[mission.profile] || mission.profile}</b><br>` +
             `${mission.vehicle ? `Véhicule <b>${mission.vehicle}</b> · ` : ""}` +
             `${mission.origin_name} → ${mission.destination_name}<br>` +
-            `${(mission.progress * 100).toFixed(0)}% · ETA ${mission.remaining_min} min` +
+            `${(mission.progress * 100).toFixed(0)}% · arrivée dans ${mission.remaining_min} min` +
           `</div>`
         );
 
@@ -401,7 +402,7 @@ export default function MapView({
         .addTo(layer)
         .bindPopup(
           `<div class="map-popup">` +
-            `<b>${label} — variante ${option.variant}</b><br>` +
+            `<b>${label}</b><br>` +
             `${option.estimated_time_min} min · ${option.distance_km} km<br>` +
             `${option.route_names?.join(" › ") || ""}` +
           `</div>`
@@ -413,22 +414,22 @@ export default function MapView({
     <>
       <div id="carte" />
       <div className="map-overlay-title">
-        <small>LIVE DIGITAL TWIN</small>
+        <small>JUMEAU NUMÉRIQUE EN DIRECT</small>
         <b>Grand Tunis</b>
       </div>
 
       <div className="legende">
         <div className="legende-titre">Risque calculé</div>
-        <span><i className="puce risk-low-dot" /> LOW</span>
-        <span><i className="puce risk-medium-dot" /> MEDIUM</span>
-        <span><i className="puce risk-high-dot" /> HIGH</span>
-        <span><i className="puce risk-critical-dot" /> CRITICAL</span>
+        <span><i className="puce risk-low-dot" /> {NIVEAUX_FR.LOW}</span>
+        <span><i className="puce risk-medium-dot" /> {NIVEAUX_FR.MEDIUM}</span>
+        <span><i className="puce risk-high-dot" /> {NIVEAUX_FR.HIGH}</span>
+        <span><i className="puce risk-critical-dot" /> {NIVEAUX_FR.CRITICAL}</span>
 
         <div className="legende-titre legend-gap">Statut opérationnel</div>
         <span><i className="puce status-ok-dot" /> Opérationnel</span>
         <span><i className="puce status-down-dot" /> Hors service</span>
         <span><i className="puce status-cyber-dot" /> Compromis</span>
-        <span><i className="puce whatif-dot" /> What-if</span>
+        <span><i className="puce whatif-dot" /> Simulation</span>
       </div>
     </>
   );
