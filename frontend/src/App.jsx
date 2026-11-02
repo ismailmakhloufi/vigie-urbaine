@@ -253,6 +253,70 @@ export default function App() {
     chargerCascade(node.id);
   };
 
+  // Les cartes indicatrices mènent directement à l'essentiel
+  const ciblerIncident = (incident) => {
+    const infraNode = infra.find((item) => item.id === incident.target_id);
+    if (infraNode) setCible(infraNode);
+    setRisqueSelectionne(riskById[incident.target_id] || null);
+    if (!riskById[incident.target_id]) setCascade(null);
+    chargerCascade(incident.target_id);
+  };
+
+  const allerVers = (idCible) => {
+    const el = document.getElementById(idCible);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.classList.remove("zapper");
+    void el.offsetWidth; // relance l'animation
+    el.classList.add("zapper");
+    setTimeout(() => el.classList.remove("zapper"), 1600);
+  };
+
+  const kpiVoirIncidents = () => {
+    allerVers("section-incidents");
+    if (kpis.actifs === 0) setToast("Aucun incident actif — la ville est calme.");
+  };
+
+  const kpiVoirRisques = () => {
+    const pivot = nodesAtRisk.find((n) => n.risk === "CRITICAL") || nodesAtRisk[0];
+    if (pivot) {
+      ouvrirRisque(pivot);
+      allerVers("panneau-focus");
+    } else {
+      allerVers("section-priorites");
+      setToast("Aucun risque calculé actuellement.");
+    }
+  };
+
+  const kpiVoirHopitaux = () => {
+    const hopital = nodesAtRisk.find(
+      (n) => n.kind === "Hospital" && ["HIGH", "CRITICAL"].includes(n.risk)
+    );
+    if (hopital) {
+      ouvrirRisque(hopital);
+      allerVers("panneau-focus");
+    } else {
+      setToast("Aucun hôpital menacé pour l'instant.");
+    }
+  };
+
+  const kpiVoirProfondeur = () => {
+    const incident = [...(risque?.incident_list || [])].sort(
+      (a, b) => (b.max_depth || 0) - (a.max_depth || 0)
+    )[0];
+    if (!incident) {
+      setToast("Aucune propagation en cours.");
+      return;
+    }
+    ciblerIncident(incident);
+    if (riskById[incident.target_id]) {
+      allerVers("panneau-focus");
+    } else {
+      // la cible n'a pas de score de risque : on pointe sa carte d'incident
+      allerVers(`incident-${incident.target_id}`);
+    }
+  };
+
   const declencher = async (definition) => {
     if (!cible) return;
 
@@ -408,16 +472,44 @@ export default function App() {
       </header>
 
       <section className="kpi-strip">
-        <div className="kpi-horizontal kpi-rouge">
+        <div
+          className="kpi-horizontal kpi-rouge"
+          role="button"
+          tabIndex={0}
+          onClick={kpiVoirIncidents}
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && kpiVoirIncidents()}
+          title="Ouvrir les incidents actifs"
+        >
           <span>Incidents actifs</span><strong>{kpis.actifs}</strong>
         </div>
-        <div className="kpi-horizontal kpi-ambre">
+        <div
+          className="kpi-horizontal kpi-ambre"
+          role="button"
+          tabIndex={0}
+          onClick={kpiVoirRisques}
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && kpiVoirRisques()}
+          title="Ouvrir le risque n°1"
+        >
           <span>Risques ÉLEVÉ / CRITIQUE</span><strong>{kpis.critiques}</strong>
         </div>
-        <div className="kpi-horizontal kpi-violet">
+        <div
+          className="kpi-horizontal kpi-violet"
+          role="button"
+          tabIndex={0}
+          onClick={kpiVoirHopitaux}
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && kpiVoirHopitaux()}
+          title="Ouvrir l'hôpital le plus menacé"
+        >
           <span>Hôpitaux menacés</span><strong>{kpis.hospitals}</strong>
         </div>
-        <div className="kpi-horizontal kpi-cyan">
+        <div
+          className="kpi-horizontal kpi-cyan"
+          role="button"
+          tabIndex={0}
+          onClick={kpiVoirProfondeur}
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && kpiVoirProfondeur()}
+          title="Ouvrir l'incident le plus profond"
+        >
           <span>Profondeur max</span><strong>{kpis.profondeur}</strong>
         </div>
       </section>
@@ -572,13 +664,24 @@ export default function App() {
         )}
 
 
-        <section className="active-incidents">
+        <section className="active-incidents" id="section-incidents">
           <div className="section-titre">Incidents actifs</div>
           {(risque?.incident_list || []).length === 0 ? (
             <div className="empty-state">✓ Aucun incident actif</div>
           ) : (
             (risque?.incident_list || []).map((incident) => (
-              <article className="incident-card" key={incident.event_id}>
+              <article
+                className="incident-card card-ciblable"
+                id={`incident-${incident.target_id}`}
+                key={incident.event_id}
+                role="button"
+                tabIndex={0}
+                onClick={() => ciblerIncident(incident)}
+                onKeyDown={(e) =>
+                  (e.key === "Enter" || e.key === " ") && ciblerIncident(incident)
+                }
+                title="Ouvrir cet incident"
+              >
                 <div className="incident-head">
                   <span className="incident-type">{ETYPES_FR[incident.type] || incident.type}</span>
                   <span>{NIVEAU(incident.severity)}</span>
@@ -587,7 +690,7 @@ export default function App() {
                 <small>
                   {incident.total_count} impact(s) · profondeur {incident.max_depth}
                 </small>
-                <button onClick={() => resoudre(incident.event_id)}>Résoudre</button>
+                <button onClick={(e) => { e.stopPropagation(); resoudre(incident.event_id); }}>Résoudre</button>
               </article>
             ))
           )}
@@ -794,7 +897,7 @@ export default function App() {
         </div>
 
         {risqueSelectionne ? (
-          <section className="risk-focus">
+          <section className="risk-focus" id="panneau-focus">
             <div className="risk-focus-top">
               <div className="risk-score-large">{risqueSelectionne.score}</div>
               <div>
@@ -878,12 +981,12 @@ export default function App() {
             )}
           </section>
         ) : (
-          <div className="risk-hint">
+          <div className="risk-hint" id="panneau-focus">
             Sélectionnez un risque ci-dessous pour afficher son explication.
           </div>
         )}
 
-        <section className="risk-list-wrap">
+        <section className="risk-list-wrap" id="section-priorites">
           <div className="section-titre">Priorités</div>
           <div className="risk-list">
             {nodesAtRisk.length === 0 ? (
