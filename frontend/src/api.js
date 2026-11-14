@@ -4,6 +4,9 @@ export async function apiFetch(path, options = {}) {
     ...options,
   });
   if (!res.ok) {
+    if (res.status === 401 && path !== "/auth/login") {
+      window.dispatchEvent(new Event("ub-session-expired"));
+    }
     let detail = res.statusText;
     try {
       const body = await res.json();
@@ -15,6 +18,14 @@ export async function apiFetch(path, options = {}) {
   }
   return res.json();
 }
+
+export const getSecurityConfig = () => apiFetch("/auth/config");
+export const getCurrentUser = () => apiFetch("/auth/me");
+export const signIn = (username, password) => apiFetch("/auth/login", {
+  method: "POST", body: JSON.stringify({ username, password }),
+});
+export const signOut = () => apiFetch("/auth/logout", { method: "POST" });
+export const getAudit = () => apiFetch("/auth/audit?limit=8");
 
 export const getInfrastructure = () => apiFetch("/infrastructure");
 export const getRisk = () => apiFetch("/risk");

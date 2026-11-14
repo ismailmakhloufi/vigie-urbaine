@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1"
 
+    security_mode: str = "demo"  # demo (localhost) ou secure (postes autorisés)
+    auth_operator_password: str = ""
+    auth_viewer_password: str = ""
+    auth_agency_key: str = ""
+    auth_cookie_secure: bool = False  # True derrière HTTPS
+    auth_allowed_origins: str = ""  # origines HTTPS, séparées par des virgules
+
 
 @lru_cache
 def get_settings() -> Settings:

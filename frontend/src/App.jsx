@@ -14,6 +14,7 @@ import {
   getInterventionPreview,
   getDecisionRanking,
   getRiskEvolution,
+  getAudit,
   getEvents,
   getEventImpact,
   getEventRecommendations,
@@ -132,7 +133,7 @@ function ScenarioCompare({ scenario }) {
   );
 }
 
-export default function App() {
+export default function App({ readonly = false, secured = false }) {
   const [infra, setInfra] = useState([]);
   const [risque, setRisque] = useState(null);
   const [historique, setHistorique] = useState([]);
@@ -157,6 +158,7 @@ export default function App() {
   const [scenarioId, setScenarioId] = useState(null);
   const [compareId, setCompareId] = useState(null);
   const [evolution, setEvolution] = useState([]);
+  const [audit, setAudit] = useState([]);
   const [chat, setChat] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
@@ -245,6 +247,14 @@ export default function App() {
     const timer = setInterval(charger, 20000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!secured || readonly) return;
+    const charger = () => getAudit().then(setAudit).catch(() => {});
+    charger();
+    const timer = setInterval(charger, 30000);
+    return () => clearInterval(timer);
+  }, [secured, readonly]);
 
   useEffect(() => {
     const update = () =>
@@ -747,12 +757,13 @@ export default function App() {
 
         <section>
           <div className="section-titre">Déclencher un incident</div>
+          {readonly && <small>Lecture seule : résolution et déclenchement réservés à l'opérateur.</small>}
           <div className="boutons-incident">
             {TYPES_INCIDENT.map((d) => (
               <button
                 key={d.type}
                 className={`btn ${d.classe}`}
-                disabled={!cible || !d.cibles.includes(cible.kind)}
+                disabled={readonly || !cible || !d.cibles.includes(cible.kind)}
                 onClick={() => declencher(d)}
               >
                 {d.label}
@@ -832,7 +843,7 @@ export default function App() {
                 <small>
                   {incident.total_count} impact(s) · profondeur {incident.max_depth}
                 </small>
-                <button onClick={(e) => { e.stopPropagation(); resoudre(incident.event_id); }}>Résoudre</button>
+                {!readonly && <button onClick={(e) => { e.stopPropagation(); resoudre(incident.event_id); }}>Résoudre</button>}
               </article>
             ))
           )}
@@ -871,7 +882,7 @@ export default function App() {
                 <button
                   className="btn-mission"
                   onClick={() => activerCorridor(m)}
-                  disabled={m.corridor_active}
+                  disabled={readonly || m.corridor_active}
                   title="Perce la congestion (gyrophare)"
                 >
                   🚨 Corridor
@@ -879,6 +890,7 @@ export default function App() {
                 <button
                   className="btn-mission"
                   onClick={() => envoyerRadio(m)}
+                  disabled={readonly}
                   title="Message radio au conducteur"
                 >
                   📻 Radio
@@ -893,6 +905,7 @@ export default function App() {
                 <button
                   className="btn-mission btn-annuler"
                   onClick={() => annuler(m.mission_id)}
+                  disabled={readonly}
                   title="Annuler la mission"
                 >
                   ✕
@@ -909,7 +922,7 @@ export default function App() {
                         {o.estimated_time_min} min · {o.distance_km} km
                       </span>
                       <small className="comp-routes">{o.route_names.join(" › ")}</small>
-                      <button onClick={() => imposerVariante(m.mission_id, o.variant)}>
+                      <button disabled={readonly} onClick={() => imposerVariante(m.mission_id, o.variant)}>
                         Imposer
                       </button>
                     </div>
@@ -930,6 +943,19 @@ export default function App() {
             </article>
           ))}
         </section>
+        {secured && !readonly && (
+          <section className="audit-panel">
+            <div className="section-titre">Journal des accès et décisions</div>
+            <small>Actions HTTP enregistrées, y compris refus d'accès. Les corps de requête ne sont pas conservés.</small>
+            {audit.length === 0 && <div className="empty-state">Aucune action enregistrée.</div>}
+            {audit.map((entry, index) => (
+              <div className="audit-entry" key={`${entry.at}-${index}`}>
+                <b>{entry.actor} · {entry.method} {entry.path}</b>
+                <span>{entry.status} · {new Date(entry.at).toLocaleString("fr-FR")}</span>
+              </div>
+            ))}
+          </section>
+        )}
       </aside>
 
       <main className="map-zone">

@@ -7,12 +7,12 @@ services:
       - NEO4J_server_memory_heap_initial__size=512m
       - NEO4J_server_memory_heap_max__size=1g
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      - "${DB_BIND_IP:-127.0.0.1}:7474:7474"
+      - "${DB_BIND_IP:-127.0.0.1}:7687:7687"
     volumes:
       - neo4j_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p urbanbutterfly 'RETURN 1' || exit 1"]
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$${NEO4J_AUTH#*/}\" 'RETURN 1' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -24,11 +24,11 @@ services:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-urbanbutterfly}
     ports:
-      - "27017:27017"
+      - "${DB_BIND_IP:-127.0.0.1}:27017:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet --eval '{ db.adminCommand({ping: 1}).ok }' -u admin -p urbanbutterfly || exit 1"]
+      test: ["CMD-SHELL", "mongosh --quiet --eval '{ db.adminCommand({ping: 1}).ok }' -u admin -p \"$${MONGO_INITDB_ROOT_PASSWORD}\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10

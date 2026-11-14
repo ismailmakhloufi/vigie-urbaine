@@ -35,6 +35,41 @@ body {
 }
 button { font: inherit; }
 
+.auth-screen {
+  min-height: 100%; display: grid; place-items: center; padding: 24px;
+  color: var(--ambre); font: 14px var(--font-mono);
+}
+.auth-card {
+  width: min(100%, 430px); display: grid; gap: 16px; padding: 34px;
+  background: var(--bg-panel); border: 1px solid var(--ambre);
+  box-shadow: 0 24px 70px #0009;
+}
+.auth-card h1 { font: 30px var(--font-head); color: var(--ink); }
+.auth-card p, .auth-card small { font-size: 10px; color: var(--ink-dim); line-height: 1.5; }
+.auth-card label { display: grid; gap: 6px; color: var(--ambre-doux); font-size: 11px; }
+.auth-card input {
+  width: 100%; background: var(--bg-panel-2); color: var(--ink);
+  border: 1px solid var(--line); padding: 11px; font: 13px var(--font-mono);
+}
+.auth-card input:focus { outline: 1px solid var(--ambre); }
+.auth-card button, .auth-bar button {
+  cursor: pointer; color: var(--bg); background: var(--ambre);
+  border: 0; padding: 9px 12px; font-weight: 700;
+}
+.auth-card button:disabled { opacity: .6; cursor: wait; }
+.auth-error { color: var(--rouge); font-size: 11px; }
+.auth-bar {
+  position: fixed; bottom: 36px; right: 12px; z-index: 1000;
+  display: flex; align-items: center; gap: 12px; padding: 6px 8px;
+  color: var(--ambre); background: var(--bg-panel); border: 1px solid var(--line);
+  font: 10px var(--font-mono);
+}
+.audit-panel { margin-top: 14px; }
+.audit-panel > small { display: block; color: var(--ink-dim); font-size: 9px; line-height: 1.4; }
+.audit-entry { display: grid; gap: 3px; padding: 6px 0; border-bottom: 1px solid var(--line); font: 9px var(--font-mono); }
+.audit-entry b { color: var(--ambre-doux); overflow-wrap: anywhere; }
+.audit-entry span { color: var(--ink-dim); }
+
 .app-v2 {
   height: 100%;
   display: grid;
