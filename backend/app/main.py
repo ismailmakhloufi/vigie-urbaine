@@ -13,12 +13,15 @@ from app.routes.missions import router as missions_router
 from app.routes.dispatch import router as dispatch_router
 from app.routes.ai import router as ai_router
 from app.services import sources
+from app.services import dispatcher as dispatcher_service
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # le monde s'agite des qu'on demarre : flux agences en ligne
     sources.start_stream()
+    # file d'attente des appels sans vehicule : rappel automatique
+    dispatcher_service.start_queue()
     yield
     sources.stop_stream()
     neo4j_client.close()

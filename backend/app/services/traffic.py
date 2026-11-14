@@ -9,8 +9,22 @@ missions) applique en temps reel. Quand l'incident est resolu, la
 congestion se resorbe d'elle-meme : rien n'est stocke.
 """
 
+import datetime as _dt
+
 from app.db.mongo_client import mongo_client
 from app.db.neo4j_client import neo4j_client
+
+# heures de pointe Grand Tunis : le trafic sature plus vite
+# (matin 07h-09h, soir 16h-19h)
+_POINTES = ((7, 9), (16, 19))
+
+
+def _coefficient_pointe() -> float:
+    h = _dt.datetime.now().hour + _dt.datetime.now().minute / 60.0
+    for debut, fin in _POINTES:
+        if debut <= h < fin:
+            return 1.5
+    return 1.0
 
 
 def congestion_map() -> dict[str, int]:
@@ -34,9 +48,11 @@ def congestion_map() -> dict[str, int]:
                 {"rid": target},
             )
             weight = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}.get(severity, 3)
+            coef = _coefficient_pointe()
             for row in neighbors:
                 rid = row["id"]
-                bumps[rid] = bumps.get(rid, 0) + max(1, weight // 2)
+                bump = max(1, round((weight // 2) * coef))
+                bumps[rid] = bumps.get(rid, 0) + bump
 
     return bumps
 

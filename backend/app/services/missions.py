@@ -80,7 +80,7 @@ def _log(doc: dict, code: str, message: str):
 
 
 def _next_mission_id() -> str:
-    return f"M-{mongo_client.count_missions() + 1:02d}"
+    return f"M-{mongo_client.sequence('mission', 'missions', 'mission_id'):02d}"
 
 
 def create_mission(origin_id: str, destination_id: str, profile: str, caller_note: str = "", vehicle: str | None = None) -> dict:
@@ -154,7 +154,8 @@ def _tick_mission(doc: dict) -> dict:
             "position": doc["position"],
             "timeline": doc["timeline"],
         })
-        _release_vehicle(doc)
+        # le convoi ne reste pas sur place : il regagne sa base
+        _release_vehicle(doc, status="RETURNING")
         return doc
 
     path = doc.get("path") or []

@@ -82,6 +82,7 @@ const STATUS_MISSION = {
 const STATUT_FLOTTE = {
   AVAILABLE: { label: "DISPO", classe: "f-dispo" },
   ON_MISSION: { label: "EN MISSION", classe: "f-mission" },
+  RETURNING: { label: "RETOUR BASE", classe: "f-retour" },
   OUT_OF_SERVICE: { label: "HORS SERVICE", classe: "f-hs" },
 };
 
@@ -130,6 +131,33 @@ export default function App() {
   const [flux, setFlux] = useState(null);
   const [comparateur, setComparateur] = useState(null);
   const chatLog = useRef(null);
+  const appelsVus = useRef(new Set());
+  const premierBalayage = useRef(true);
+
+  // double bip court (standard d'urgence) via WebAudio — aucun fichier
+  const bipAppel = () => {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      for (const decalage of [0, 0.18]) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = 880;
+        const t0 = ctx.currentTime + decalage;
+        gain.gain.setValueAtTime(0.001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.12, t0 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.14);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + 0.16);
+      }
+      setTimeout(() => ctx.close(), 700);
+    } catch {
+      /* audio indisponible : silencieux */
+    }
+  };
 
   const refresh = async () => {
     try {
@@ -150,6 +178,19 @@ export default function App() {
       setFlotte(flotteData);
       setAppels(appelsData);
       setFlux(fluxData);
+      // appel entrant : double bip + annonce
+      const nouveaux = appelsData.filter((a) => !appelsVus.current.has(a.call_id));
+      for (const a of appelsData) appelsVus.current.add(a.call_id);
+      if (!premierBalayage.current && nouveaux.length > 0) {
+        bipAppel();
+        const premier = nouveaux[0];
+        setToast(
+          nouveaux.length === 1
+            ? `📞 Nouvel appel ${premier.kind === "SUPPLY" ? "logistique" : "médical"} — ${premier.destination_id}`
+            : `📞 ${nouveaux.length} nouveaux appels`
+        );
+      }
+      premierBalayage.current = false;
       setErreur(null);
     } catch (exc) {
       setErreur(`Backend injoignable : ${exc.message}`);
@@ -595,7 +636,13 @@ export default function App() {
                 <span>{a.kind === "SUPPLY" ? "📦 logistique" : "🚑 médical"}</span>
                 <small>→ {a.destination_id}</small>
                 <span className={`appel-statut s-${(a.status || "").toLowerCase()}`}>
-                  {a.status === "DISPATCHED" ? "✓ assigné" : a.status === "NO_VEHICLE" ? "✗ aucun véhicule" : a.status}
+                  {a.status === "DISPATCHED"
+                    ? "✓ assigné"
+                    : a.status === "NO_VEHICLE"
+                      ? "✗ aucun véhicule"
+                      : a.status === "PENDING"
+                        ? "⏳ en attente"
+                        : a.status}
                 </span>
                 <small>{a.assigned_vehicle || a.note || ""}</small>
               </div>

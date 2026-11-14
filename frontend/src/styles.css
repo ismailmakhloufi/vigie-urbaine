@@ -708,8 +708,10 @@ button { font: inherit; }
 }
 .f-dispo .flotte-statut { background: rgba(61, 220, 151, 0.13); color: var(--vert); }
 .f-mission .flotte-statut { background: rgba(255, 176, 32, 0.15); color: var(--ambre); }
+.f-retour .flotte-statut { background: rgba(56, 212, 232, 0.15); color: var(--cyan); }
 .f-hs .flotte-statut { background: rgba(255, 77, 94, 0.15); color: var(--rouge); }
 .f-mission { border-color: rgba(255, 176, 32, 0.4); border-left: 3px solid var(--ambre); }
+.f-retour { border-color: rgba(56, 212, 232, 0.35); border-left: 3px solid var(--cyan); }
 .flotte-mission { color: var(--cyan); font-size: 10.5px; font-family: var(--font-mono); }
 
 /* --- standard d'urgence / appels --- */
@@ -728,6 +730,7 @@ button { font: inherit; }
 .appel-row b { color: var(--cyan); font-family: var(--font-mono); }
 .appel-statut { font-size: 10px; font-weight: 600; }
 .appel-statut.s-dispatched { color: var(--vert); }
+.s-pending { color: var(--ambre); }
 .s-no_vehicle { color: var(--rouge); }
 
 /* ==================== MISSIONS ==================== */

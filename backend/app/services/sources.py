@@ -65,7 +65,7 @@ _thread: threading.Thread | None = None
 _stop = threading.Event()
 _pause = threading.Event()
 _lock = threading.Lock()
-_stats = {"calls": 0, "incidents": 0, "resolved": 0, "alertes_meteo": 0, "rejets": 0}
+_stats = {"calls": 0, "incidents": 0, "resolved": 0, "alertes_meteo": 0, "rejets": 0, "doublons": 0}
 _pending: list[tuple[str, float]] = []  # (event_id, expires_at)
 _started_at: str | None = None
 
@@ -82,10 +82,16 @@ def _push_call():
     try:
         call = dispatcher.random_call()
         _stats["calls"] += 1
-        print(
-            f"[sources] appel #{_stats['calls']} : {call['call_id']} "
-            f"({call['kind']}/{call['destination_id']}) -> {call['assigned_vehicle']}"
-        )
+        if call.get("status") == "PENDING":
+            print(
+                f"[sources] appel #{_stats['calls']} : {call['call_id']} "
+                f"({call['kind']}/{call['destination_id']}) -> file d'attente"
+            )
+        else:
+            print(
+                f"[sources] appel #{_stats['calls']} : {call['call_id']} "
+                f"({call['kind']}/{call['destination_id']}) -> {call['assigned_vehicle']}"
+            )
     except RuntimeError:
         _stats["rejets"] += 1
     except Exception as exc:
@@ -225,6 +231,15 @@ def _create_event(
 ) -> str | None:
     from app.models.event import EventCreate
     from app.routes.events import create_event
+
+    # un seul incident actif par (type, cible) : pas de doublon de flux
+    deja = mongo_client._db.events.count_documents(
+        {"type": etype, "target_id": target_id, "status": {"$ne": "RESOLVED"}}
+    )
+    if deja:
+        _stats["doublons"] += 1
+        print(f"[sources] doublon refuse ({etype}/{target_id})")
+        return None
 
     try:
         result = create_event(EventCreate(

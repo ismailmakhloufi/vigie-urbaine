@@ -71,6 +71,32 @@ class MongoDbClient:
     def count_missions(self) -> int:
         return self._db.missions.count_documents({})
 
+    # ----- compteur sequentiel (IDs atomiques) -----
+
+    def _amorcer_compteur(self, cle: str, collection: str, champ: str):
+        """Au premier appel : le compteur repart du plus haut numero deja utilise."""
+        col = self._db[collection]
+        dernier = 0
+        for doc in col.find({}, {champ: 1}):
+            ident = str(doc.get(champ) or "")
+            suffixe = ident.rsplit("-", 1)[-1]
+            if suffixe.isdigit():
+                dernier = max(dernier, int(suffixe))
+        self._db.counters.update_one(
+            {"_id": cle}, {"$set": {"seq": dernier}}, upsert=True
+        )
+
+    def sequence(self, cle: str, collection: str, champ: str) -> int:
+        """Increment atomique d'un compteur nomme ($inc) — IDs sans collision."""
+        col = self._db.counters
+        if col.find_one({"_id": cle}) is None:
+            self._amorcer_compteur(cle, collection, champ)
+        doc = col.find_one_and_update(
+            {"_id": cle}, {"$inc": {"seq": 1}},
+            upsert=True, return_document=True,
+        )
+        return doc["seq"]
+
     # ----- flotte (registry vehicules) -----
 
     def insert_vehicle(self, vehicle: dict):

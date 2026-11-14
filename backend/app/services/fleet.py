@@ -6,7 +6,8 @@ faits vers /integration/fleet-updates. Ce service fait vivre le registre :
 matricules, types, statuts, positions. Le dispatch puise ici.
 """
 
-from datetime import datetime, timezone
+import math
+from datetime import datetime, timedelta, timezone
 
 from app.db.mongo_client import mongo_client
 from app.db.neo4j_client import neo4j_client
@@ -58,6 +59,7 @@ def ensure_fleet() -> int:
 
 def list_fleet() -> list[dict]:
     ensure_fleet()
+    _tick_retours()
     out = []
     for v in mongo_client.list_vehicles():
         v = dict(v)
@@ -114,6 +116,17 @@ def assign(callsign: str, mission_id: str):
     mongo_client.upsert_vehicle(callsign, {"status": "ON_MISSION", "mission_id": mission_id})
 
 
+def _haversine_km(a: list[float], b: list[float]) -> float:
+    lat1, lon1, lat2, lon2 = a[0], a[1], b[0], b[1]
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    x = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    )
+    return 6371.0 * 2 * math.asin(math.sqrt(x))
+
+
 def release(mission_id: str, position: list[float] | None = None, status: str = "AVAILABLE"):
     v = next((v for v in mongo_client.list_vehicles() if v.get("mission_id") == mission_id), None)
     if not v:
@@ -121,5 +134,53 @@ def release(mission_id: str, position: list[float] | None = None, status: str = 
     fields = {"status": status, "mission_id": None}
     if position:
         fields["position"] = position
+    if status == "RETURNING" and position:
+        # le convoi regagne sa base : duree ~ 1 min/km, bornee 30 s - 4 min
+        coords = _base_coords()
+        base = coords.get(v.get("base_id"), CENTER)
+        km = _haversine_km(position, base)
+        duree = max(30.0, min(240.0, km * 60.0))
+        now = _now()
+        fields["return_started"] = _iso(now)
+        fields["return_until"] = _iso(now + timedelta(seconds=duree))
+        fields["return_from"] = position
     mongo_client.upsert_vehicle(v["callsign"], fields)
     return v["callsign"]
+
+
+def _tick_retours():
+    """Fait avancer les vehicules en retour de base vers leur depot."""
+    now = _now()
+    coords = _base_coords()
+    for v in mongo_client.list_vehicles():
+        if v.get("status") != "RETURNING":
+            continue
+        try:
+            until = datetime.fromisoformat(v["return_until"])
+            started = datetime.fromisoformat(v["return_started"])
+        except (KeyError, TypeError, ValueError):
+            # donnees incoherentes : remise dispo immediate
+            mongo_client.upsert_vehicle(v["callsign"], {
+                "status": "AVAILABLE", "mission_id": None,
+                "return_until": None, "return_started": None, "return_from": None,
+            })
+            continue
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=timezone.utc)
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        base = coords.get(v.get("base_id"), CENTER)
+        if now >= until:
+            mongo_client.upsert_vehicle(v["callsign"], {
+                "status": "AVAILABLE", "position": base, "mission_id": None,
+                "return_until": None, "return_started": None, "return_from": None,
+            })
+            continue
+        total = max(1.0, (until - started).total_seconds())
+        progres = 1.0 - (until - now).total_seconds() / total
+        depart = v.get("return_from") or v.get("position") or base
+        position = [
+            depart[0] + (base[0] - depart[0]) * progres,
+            depart[1] + (base[1] - depart[1]) * progres,
+        ]
+        mongo_client.upsert_vehicle(v["callsign"], {"position": position})

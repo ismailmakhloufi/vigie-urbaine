@@ -68,6 +68,23 @@ def _active_dynamic_state():
     return blocked, rainy_zones, notes
 
 
+# ----- cache reseau : la structure (routes + aretes) ne bouge presque jamais,
+# on evite de requeter Neo4j a chaque itineraire. TTL court pour laisser
+# passer les changements de statut (blocages). -----
+import time as _time
+
+_RESEAU_CACHE: dict = {"t": 0.0, "valeur": None}
+_RESEAU_TTL = 10.0  # secondes
+
+
+def _reseau() -> tuple[dict, list]:
+    maintenant = _time.monotonic()
+    if _RESEAU_CACHE["valeur"] is None or maintenant - _RESEAU_CACHE["t"] > _RESEAU_TTL:
+        _RESEAU_CACHE["valeur"] = _load_network(set())
+        _RESEAU_CACHE["t"] = maintenant
+    return _RESEAU_CACHE["valeur"]
+
+
 def _load_network(rainy_zone_ids: set[str]):
     """
     Charge noeuds (Road) + aretes (CONNECTS_TO) via Neo4j :
@@ -215,7 +232,7 @@ def compute_route(
     mode: str = "FAST",
     corridor: bool = False,
 ) -> dict:
-    roads, edges = _load_network(set())
+    roads, edges = _reseau()
     blocked, rainy_zones, notes = _active_dynamic_state()
 
     for rid, meta in roads.items():
