@@ -84,6 +84,7 @@ const STATUS_MISSION = {
 
 const STATUT_FLOTTE = {
   AVAILABLE: { label: "DISPO", classe: "f-dispo" },
+  RESERVED: { label: "RÉSERVÉ", classe: "f-mission" },
   ON_MISSION: { label: "EN MISSION", classe: "f-mission" },
   RETURNING: { label: "RETOUR BASE", classe: "f-retour" },
   OUT_OF_SERVICE: { label: "HORS SERVICE", classe: "f-hs" },
@@ -730,13 +731,15 @@ export default function App() {
                 <span className={`appel-statut s-${(a.status || "").toLowerCase()}`}>
                   {a.status === "DISPATCHED"
                     ? "✓ assigné"
-                    : a.status === "NO_VEHICLE"
-                      ? "✗ aucun véhicule"
-                      : a.status === "PENDING"
-                        ? "⏳ en attente"
+                      : a.status === "NO_VEHICLE"
+                        ? "✗ aucun véhicule"
+                        : a.status === "ROUTE_UNAVAILABLE"
+                          ? "⛔ accès routier indisponible"
+                        : a.status === "PENDING"
+                          ? "⏳ attente véhicule"
                         : a.status}
                 </span>
-                <small>{a.assigned_vehicle || a.note || ""}</small>
+                <small>{a.assigned_vehicle || a.queue_reason || a.note || ""}</small>
               </div>
             ))}
           </div>

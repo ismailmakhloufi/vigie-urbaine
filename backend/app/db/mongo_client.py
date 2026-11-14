@@ -35,6 +35,35 @@ class MongoDbClient:
             {"_id": ObjectId(event_id)}, {"$set": fields}
         )
 
+    def auto_resolve_events(self) -> list[dict]:
+        return list(self._db.events.find(
+            {"status": "ACTIVE", "auto_resolve_at": {"$exists": True}},
+            {"_id": 1, "auto_resolve_at": 1},
+        ))
+
+    def restore_legacy_auto_resolve(self, duration_seconds: int):
+        """Rattrape les incidents simulés créés avant la persistance des échéances."""
+        from datetime import datetime, timedelta, timezone
+
+        query = {"status": "ACTIVE", "auto_resolve_at": {"$exists": False},
+                 "$or": [
+                     {"payload.source": {"$in": ["flux-automatique", "virtual-siem", "virtual-scada"]}},
+                     {"description": {"$regex": r"^Meteo reelle zone"}},
+                 ]}
+        now = datetime.now(timezone.utc)
+        for event in self._db.events.find(query, {"timestamp": 1}):
+            if event.get("timestamp"):
+                timestamp = event["timestamp"]
+                if timestamp.tzinfo is None:
+                    timestamp = timestamp.replace(tzinfo=timezone.utc)
+                # Les anciens incidents n'ont pas d'échéance connue : ne pas
+                # résoudre toute la crise d'un coup au premier redémarrage.
+                deadline = max(timestamp, now) + timedelta(seconds=duration_seconds)
+                self._db.events.update_one(
+                    {"_id": event["_id"], "status": "ACTIVE", "auto_resolve_at": {"$exists": False}},
+                    {"$set": {"auto_resolve_at": deadline}},
+                )
+
     def count_active_events(self) -> int:
         return self._db.events.count_documents({"status": {"$ne": "RESOLVED"}})
 
@@ -118,6 +147,28 @@ class MongoDbClient:
     def upsert_vehicle(self, callsign: str, fields: dict):
         return self._db.vehicles.update_one(
             {"callsign": callsign}, {"$set": fields}, upsert=True
+        )
+
+    def reserve_vehicle(self, callsign: str, reservation: str) -> bool:
+        """Une seule transition AVAILABLE -> RESERVED peut gagner."""
+        result = self._db.vehicles.update_one(
+            {"callsign": callsign, "status": "AVAILABLE"},
+            {"$set": {"status": "RESERVED", "reservation": reservation}},
+        )
+        return result.modified_count == 1
+
+    def commit_vehicle(self, callsign: str, reservation: str, mission_id: str) -> bool:
+        result = self._db.vehicles.update_one(
+            {"callsign": callsign, "status": "RESERVED", "reservation": reservation},
+            {"$set": {"status": "ON_MISSION", "mission_id": mission_id},
+             "$unset": {"reservation": ""}},
+        )
+        return result.modified_count == 1
+
+    def cancel_vehicle_reservation(self, callsign: str, reservation: str):
+        return self._db.vehicles.update_one(
+            {"callsign": callsign, "status": "RESERVED", "reservation": reservation},
+            {"$set": {"status": "AVAILABLE"}, "$unset": {"reservation": ""}},
         )
 
     def list_vehicles(self) -> list[dict]:

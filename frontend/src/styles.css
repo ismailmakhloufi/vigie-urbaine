@@ -817,6 +817,7 @@ button { font: inherit; }
 .appel-statut { font-size: 10px; font-weight: 600; }
 .appel-statut.s-dispatched { color: var(--vert); }
 .s-pending { color: var(--ambre); }
+.s-route_unavailable { color: var(--ambre); }
 .s-no_vehicle { color: var(--rouge); }
 
 /* ==================== MISSIONS ==================== */

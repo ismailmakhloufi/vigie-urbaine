@@ -83,9 +83,16 @@ def _next_mission_id() -> str:
     return f"M-{mongo_client.sequence('mission', 'missions', 'mission_id'):02d}"
 
 
-def create_mission(origin_id: str, destination_id: str, profile: str, caller_note: str = "", vehicle: str | None = None) -> dict:
+class RouteUnavailable(RuntimeError):
+    """Pas d'itinéraire dans l'état courant du réseau."""
+
+
+def create_mission(origin_id: str, destination_id: str, profile: str, caller_note: str = "", vehicle: str | None = None, call_id: str | None = None) -> dict:
     """L'appel arrive : calcul du trajet optimal a l'instant T + depart."""
-    route = compute_route(origin_id, destination_id, profile)
+    try:
+        route = compute_route(origin_id, destination_id, profile)
+    except (RuntimeError, LookupError) as exc:
+        raise RouteUnavailable(str(exc)) from exc
 
     doc = {
         "mission_id": _next_mission_id(),
@@ -95,6 +102,7 @@ def create_mission(origin_id: str, destination_id: str, profile: str, caller_not
         "destination_name": route["destination_name"],
         "profile": profile,
         "vehicle": vehicle,
+        "call_id": call_id,
         "caller_note": caller_note,
         "status": "EN_ROUTE",
         "route": route["route"],

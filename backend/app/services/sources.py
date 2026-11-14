@@ -82,10 +82,10 @@ def _push_call():
     try:
         call = dispatcher.random_call()
         _stats["calls"] += 1
-        if call.get("status") == "PENDING":
+        if call.get("status") in ("PENDING", "ROUTE_UNAVAILABLE"):
             print(
                 f"[sources] appel #{_stats['calls']} : {call['call_id']} "
-                f"({call['kind']}/{call['destination_id']}) -> file d'attente"
+                f"({call['kind']}/{call['destination_id']}) -> {call['status']}"
             )
         else:
             print(
@@ -241,6 +241,7 @@ def _create_event(
         print(f"[sources] doublon refuse ({etype}/{target_id})")
         return None
 
+    deadline = datetime.now(timezone.utc) + timedelta(seconds=random.uniform(*RESOLVE_AFTER))
     try:
         result = create_event(EventCreate(
             type=etype,
@@ -248,6 +249,7 @@ def _create_event(
             target_id=target_id,
             description=description,
             payload=payload or {"source": "flux-automatique"},
+            auto_resolve_at=deadline,
         ))
         return result["id"]
     except Exception as exc:
@@ -260,8 +262,10 @@ def _register(event_id: str | None):
     if not event_id:
         return
     _stats["incidents"] += 1
-    with _lock:
-        _pending.append((event_id, _now() + random.uniform(*RESOLVE_AFTER)))
+    event = mongo_client.get_event(event_id)
+    if event and event.get("auto_resolve_at"):
+        with _lock:
+            _pending.append((event_id, event["auto_resolve_at"].timestamp()))
     print(f"[sources] incident #{_stats['incidents']} pousse ({event_id[:8]})")
 
 
@@ -282,8 +286,6 @@ def _resolve_expired():
     with _lock:
         now = _now()
         dus = [(eid, exp) for eid, exp in _pending if exp <= now]
-        if dus:
-            _pending[:] = [(eid, exp) for eid, exp in _pending if exp > now]
     for eid, _ in dus:
         try:
             resolve_event(eid)
@@ -291,6 +293,23 @@ def _resolve_expired():
             print(f"[sources] incident #{eid[:8]} resolu naturellement")
         except Exception as exc:
             print(f"[sources] resolution ratee ({eid[:8]}) : {exc}")
+            continue  # même échéance, prochain tour : réessai
+        with _lock:
+            _pending[:] = [(ident, exp) for ident, exp in _pending if ident != eid]
+
+
+def _restore_pending():
+    """Mongo fait autorité après redémarrage, même si _register n'a pas tourné."""
+    mongo_client.restore_legacy_auto_resolve(RESOLVE_AFTER[1])
+    rows = mongo_client.auto_resolve_events()
+    restored = []
+    for row in rows:
+        deadline = row["auto_resolve_at"]
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        restored.append((str(row["_id"]), deadline.timestamp()))
+    with _lock:
+        _pending[:] = restored
 
 
 def _loop():
@@ -330,6 +349,7 @@ def start_stream() -> dict:
     global _thread, _started_at
     if _thread and _thread.is_alive():
         return {"status": "already_running"}
+    _restore_pending()
     _stop.clear()
     _pause.clear()
     _started_at = _utc_now()

@@ -99,7 +99,16 @@ def integrate_fleet_update(payload: dict) -> dict:
     if not fields:
         raise ValueError("aucun champ à fusionner")
 
-    mongo_client.upsert_vehicle(callsign, fields)
+    # Un retour d'agence ne doit pas effacer une reservation de dispatch.
+    if fields.get("status") == "AVAILABLE":
+        result = mongo_client._db.vehicles.update_one(
+            {"callsign": callsign, "status": {"$ne": "RESERVED"}},
+            {"$set": fields}, upsert=False,
+        )
+        if not result.matched_count:
+            mongo_client.insert_vehicle({"callsign": callsign, **fields})
+    else:
+        mongo_client.upsert_vehicle(callsign, fields)
     return {"callsign": callsign, **fields}
 
 
@@ -112,8 +121,16 @@ def available(type_needed: str | None = None) -> list[dict]:
     return vehicles
 
 
-def assign(callsign: str, mission_id: str):
-    mongo_client.upsert_vehicle(callsign, {"status": "ON_MISSION", "mission_id": mission_id})
+def reserve(callsign: str, call_id: str) -> bool:
+    return mongo_client.reserve_vehicle(callsign, call_id)
+
+
+def assign(callsign: str, mission_id: str, call_id: str) -> bool:
+    return mongo_client.commit_vehicle(callsign, call_id, mission_id)
+
+
+def cancel_reservation(callsign: str, call_id: str):
+    mongo_client.cancel_vehicle_reservation(callsign, call_id)
 
 
 def _haversine_km(a: list[float], b: list[float]) -> float:

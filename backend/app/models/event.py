@@ -16,6 +16,7 @@ class EventCreate(BaseModel):
     )
     description: str = ""
     payload: dict[str, Any] = Field(default_factory=dict)
+    auto_resolve_at: datetime | None = Field(default=None, exclude=True)
 
 
 class EventOut(BaseModel):

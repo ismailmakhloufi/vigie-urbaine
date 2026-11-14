@@ -71,6 +71,10 @@ def create_event(event: EventCreate):
 
     # Document complet stocké dans MongoDB
     doc = event.model_dump()
+    # Champ interne du flux simulé : inscrit dans le même insert que l'incident.
+    auto_resolve_at = event.auto_resolve_at
+    if auto_resolve_at is not None:
+        doc["auto_resolve_at"] = auto_resolve_at
     doc["timestamp"] = datetime.now(timezone.utc)
     doc["status"] = "ACTIVE"
     doc["previous_status"] = target_data.get("status")

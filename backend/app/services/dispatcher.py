@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from app.db.mongo_client import mongo_client
 from app.db.neo4j_client import neo4j_client
 from app.services import fleet
-from app.services.missions import create_mission
+from app.services.missions import RouteUnavailable, create_mission
 
 # le type d'urgence conduit au type de mission
 MEDICAL = "MEDICAL"
@@ -65,13 +65,13 @@ def profile_for(kind: str) -> str:
     return {"MEDICAL": "AMBULANCE", "SUPPLY": "SUPPLY"}.get(kind, "NORMAL")
 
 
-def _choisir_vehicule(profile: str, coords: list[float], destination_id: str):
-    """Vehicule dispo le plus proche, sans jamais partir pour aller a sa base."""
+def _candidats(profile: str, coords: list[float], destination_id: str):
+    """Véhicules disponibles ordonnés, sans partir pour aller à leur base."""
     candidates = fleet.available(None)
     typed = [v for v in candidates if v["type"] == profile]
     pool = typed or candidates
     if not pool:
-        return None
+        return []
 
     def veh_ref(v):
         ref = v.get("position") or []
@@ -82,12 +82,8 @@ def _choisir_vehicule(profile: str, coords: list[float], destination_id: str):
                 ref = [36.80, 10.17]
         return _distance_km(ref, coords)
 
-    chosen = sorted(pool, key=veh_ref)[0]
-    for v in sorted(pool, key=veh_ref):
-        if v.get("base_id") != destination_id:
-            chosen = v
-            break
-    return chosen
+    ordered = sorted(pool, key=veh_ref)
+    return [v for v in ordered if v.get("base_id") != destination_id] or ordered
 
 
 def _envoyer(call: dict, chosen: dict) -> dict:
@@ -98,9 +94,33 @@ def _envoyer(call: dict, chosen: dict) -> dict:
         profile=profile,
         caller_note=call.get("note", ""),
         vehicle=chosen["callsign"],
+        call_id=call["call_id"],
     )
-    fleet.assign(chosen["callsign"], mission["mission_id"])
+    if not fleet.assign(chosen["callsign"], mission["mission_id"], call["call_id"]):
+        # Ne jamais laisser une mission active sans propriétaire.
+        mongo_client._db.missions.delete_one({"mission_id": mission["mission_id"]})
+        raise RuntimeError("réservation de véhicule perdue avant le départ")
     return mission
+
+
+def _dispatch(call: dict, coords: list[float]) -> tuple[str, dict | None, dict | None]:
+    """Essaie chaque véhicule : réservation atomique avant routage et écriture."""
+    candidates = _candidats(profile_for(call["kind"]), coords, call["destination_id"])
+    reserved = False
+    route_failed = False
+    for chosen in candidates:
+        if not fleet.reserve(chosen["callsign"], call["call_id"]):
+            continue
+        reserved = True
+        try:
+            mission = _envoyer(call, chosen)
+            return "DISPATCHED", chosen, mission
+        except RouteUnavailable as exc:
+            route_failed = True
+            print(f"[dispatcher] itinéraire {chosen['callsign']} indisponible : {exc}")
+        finally:
+            fleet.cancel_reservation(chosen["callsign"], call["call_id"])
+    return ("ROUTE_UNAVAILABLE" if route_failed and reserved else "PENDING"), None, None
 
 
 def create_call(kind: str, destination_id: str, note: str = "") -> dict:
@@ -111,7 +131,6 @@ def create_call(kind: str, destination_id: str, note: str = "") -> dict:
     destination_id = destination_id.upper().strip()
     coords = _coords_of(destination_id)
 
-    profile = profile_for(kind)
     call_id = f"A-{mongo_client.sequence('appel', 'calls', 'call_id'):03d}"
     call = {
         "call_id": call_id,
@@ -120,23 +139,21 @@ def create_call(kind: str, destination_id: str, note: str = "") -> dict:
         "note": note,
         "status": "PENDING",
         "created_at": _iso(_now()),
+        "queue_tries": 0,
     }
 
-    chosen = _choisir_vehicule(profile, coords, destination_id)
-    if chosen is None:
-        # flotte saturee : l'appel PATIENTE dans la file, le dispatcher
-        # reessaie automatiquement des qu'un vehicule se libere
-        call["queue_tries"] = 0
-        mongo_client.insert_call(call)
-        call.pop("_id", None)
-        return call
-
-    mission = _envoyer(call, chosen)
-
-    call["status"] = "DISPATCHED"
-    call["assigned_vehicle"] = chosen["callsign"]
-    call["mission_id"] = mission["mission_id"]
     mongo_client.insert_call(call)
+    status, chosen, mission = _dispatch(call, coords)
+    call["status"] = status
+    if mission:
+        call["assigned_vehicle"] = chosen["callsign"]
+        call["mission_id"] = mission["mission_id"]
+    elif status == "ROUTE_UNAVAILABLE":
+        call["queue_reason"] = "destination momentanément inaccessible par la route"
+    else:
+        call["queue_reason"] = "aucun véhicule disponible"
+    mongo_client.update_call(call_id, {key: value for key, value in call.items()
+                                       if key not in ("_id", "call_id")})
     call.pop("_id", None)
     return call
 
@@ -151,56 +168,52 @@ def list_calls(limit: int = 12) -> list[dict]:
 
 
 def _file_traiter():
-    """Reessaye les appels PENDING : envoyer ou classer NO_VEHICLE."""
-    for doc in mongo_client._db.calls.find({"status": "PENDING"}):
+    """Reessaie la flotte saturée (borné) et les routes bloquées (non borné)."""
+    for doc in mongo_client._db.calls.find({"status": {"$in": ["PENDING", "ROUTE_UNAVAILABLE"]}}):
         call = dict(doc)
         call.pop("_id", None)
-        tries = call.get("queue_tries", 0) + 1
+        existing = mongo_client._db.missions.find_one({"call_id": call["call_id"]})
+        if existing:
+            mongo_client.update_call(call["call_id"], {
+                "status": "DISPATCHED", "assigned_vehicle": existing["vehicle"],
+                "mission_id": existing["mission_id"], "queue_reason": None,
+            })
+            continue
         try:
             coords = _coords_of(call["destination_id"])
         except (LookupError, RuntimeError):
-            # destination injoignable : appel classe sans vehicule
-            mongo_client._db.calls.update_one(
-                {"call_id": call["call_id"]},
-                {"$set": {"status": "NO_VEHICLE",
-                          "note": "destination injoignable"}},
-            )
+            mongo_client.update_call(call["call_id"], {"status": "ROUTE_UNAVAILABLE",
+                "queue_reason": "destination momentanément inaccessible"})
             continue
-        chosen = _choisir_vehicule(profile_for(call["kind"]), coords,
-                                   call["destination_id"])
-        if chosen is None:
+        try:
+            status, chosen, mission = _dispatch(call, coords)
+        except Exception as exc:
+            print(f"[dispatcher] rappel {call['call_id']} raté : {exc}")
+            continue
+        if status == "PENDING":
+            tries = call.get("queue_tries", 0) + 1
             if tries >= FILE_MAX_TRIES:
-                mongo_client._db.calls.update_one(
-                    {"call_id": call["call_id"]},
-                    {"$set": {"status": "NO_VEHICLE", "queue_tries": tries}},
-                )
+                mongo_client.update_call(call["call_id"], {"status": "NO_VEHICLE",
+                    "queue_tries": tries, "queue_reason": "flotte indisponible après plusieurs essais"})
                 print(f"[dispatcher] appel {call['call_id']} classe "
                       "NO_VEHICLE (file saturee)")
             else:
-                mongo_client._db.calls.update_one(
-                    {"call_id": call["call_id"]}, {"$set": {"queue_tries": tries}}
-                )
+                mongo_client.update_call(call["call_id"], {"status": "PENDING",
+                    "queue_tries": tries, "queue_reason": "aucun véhicule disponible"})
             continue
-        try:
-            mission = _envoyer(call, chosen)
-        except Exception as exc:
-            print(f"[dispatcher] rappel {call['call_id']} rate : {exc}")
-            mongo_client._db.calls.update_one(
-                {"call_id": call["call_id"]}, {"$set": {"queue_tries": tries}}
-            )
+        if status == "ROUTE_UNAVAILABLE":
+            mongo_client.update_call(call["call_id"], {"status": status, "queue_tries": 0,
+                "queue_reason": "destination momentanément inaccessible par la route"})
             continue
-        mongo_client._db.calls.update_one(
-            {"call_id": call["call_id"]},
-            {"$set": {
+        mongo_client.update_call(call["call_id"], {
                 "status": "DISPATCHED",
                 "assigned_vehicle": chosen["callsign"],
                 "mission_id": mission["mission_id"],
                 "dispatched_at": _iso(_now()),
-                "queue_tries": tries,
-            }},
-        )
+                "queue_reason": None,
+            })
         print(f"[dispatcher] file d'attente : {call['call_id']} envoye avec "
-              f"{chosen['callsign']} (essai {tries})")
+              f"{chosen['callsign']}")
 
 
 def _file_loop():
@@ -216,10 +229,27 @@ def start_queue():
     global _file_thread
     if _file_thread and _file_thread.is_alive():
         return
+    recover_reservations()
     _file_stop.clear()
     _file_thread = threading.Thread(target=_file_loop, daemon=True,
                                     name="file-appels")
     _file_thread.start()
+
+
+def recover_reservations():
+    """Après un arrêt au milieu du routage, achever ou annuler les réservations."""
+    for vehicle in mongo_client._db.vehicles.find({"status": "RESERVED"}):
+        call_id = vehicle.get("reservation")
+        callsign = vehicle["callsign"]
+        mission = mongo_client._db.missions.find_one({"call_id": call_id, "vehicle": callsign})
+        if mission:
+            if fleet.assign(callsign, mission["mission_id"], call_id):
+                mongo_client.update_call(call_id, {
+                    "status": "DISPATCHED", "assigned_vehicle": callsign,
+                    "mission_id": mission["mission_id"], "queue_reason": None,
+                })
+        else:
+            fleet.cancel_reservation(callsign, call_id)
 
 
 def random_call() -> dict:
