@@ -18,6 +18,8 @@ export async function apiFetch(path, options = {}) {
 
 export const getInfrastructure = () => apiFetch("/infrastructure");
 export const getRisk = () => apiFetch("/risk");
+export const getInterventionPreview = (eventId) =>
+  apiFetch(`/risk/intervention/${encodeURIComponent(eventId)}`);
 export const getEvents = (limit = 20) => apiFetch(`/events?limit=${limit}`);
 
 export const postEvent = (body) =>

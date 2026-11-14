@@ -11,6 +11,7 @@ import {
 import {
   getInfrastructure,
   getRisk,
+  getInterventionPreview,
   getEvents,
   getEventImpact,
   getEventRecommendations,
@@ -123,6 +124,9 @@ export default function App() {
   const [plan, setPlan] = useState(null);
   const [sourceEventId, setSourceEventId] = useState(null);
   const analyseRequest = useRef(0);
+  const [projection, setProjection] = useState(null);
+  const [projectionBusy, setProjectionBusy] = useState(false);
+  const projectionRequest = useRef(0);
   const [chat, setChat] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
@@ -287,8 +291,26 @@ export default function App() {
   };
 
   const choisirSource = (eventId) => {
+    projectionRequest.current += 1;
+    setProjection(null);
+    setProjectionBusy(false);
     setSourceEventId(eventId);
     chargerCascade(eventId);
+  };
+
+  const estimerResolution = async (eventId) => {
+    const demande = ++projectionRequest.current;
+    setProjection(null);
+    setProjectionBusy(true);
+    try {
+      const resultat = await getInterventionPreview(eventId);
+      if (demande !== projectionRequest.current) return;
+      setProjection({ ...resultat, calculated_at: new Date().toLocaleTimeString("fr-FR") });
+    } catch (exc) {
+      if (demande === projectionRequest.current) setToast(`Simulation impossible : ${exc.message}`);
+    } finally {
+      if (demande === projectionRequest.current) setProjectionBusy(false);
+    }
   };
 
   const gererSelection = (node) => {
@@ -1000,6 +1022,50 @@ export default function App() {
                     </li>
                   ))}
                 </ol>
+              </div>
+            )}
+            {sourceActive && (
+              <div className="risk-projection">
+                <div className="section-titre">Effet d'une intervention</div>
+                <button
+                  className="risk-preview-button"
+                  onClick={() => estimerResolution(sourceActive.event_id)}
+                  disabled={projectionBusy}
+                >
+                  {projectionBusy ? "Calcul en cours…" : "Estimer la résolution de cet incident"}
+                </button>
+                {projection?.event_id === sourceActive.event_id && (
+                  <div className="risk-preview-result" aria-live="polite">
+                    <p>Scénario hypothétique · {projection.calculated_at} · aucun incident réellement résolu</p>
+                    {(() => {
+                      const ici = projection.nodes.find((n) => n.id === risqueAffiche.id);
+                      return ici && (
+                        <div className="risk-preview-score">
+                          <span>Risque global de {risqueAffiche.name}</span>
+                          <strong>{ici.before} → {ici.after}/100</strong>
+                          <small>{ici.reduction > 0 ? `−${ici.reduction} points estimés` : "Aucun changement estimé : d'autres incidents maintiennent le risque."}</small>
+                        </div>
+                      );
+                    })()}
+                    <div className="risk-preview-totals">
+                      <span>{projection.changed_count} nœud(s) à risque réduit</span>
+                      <span>{projection.no_longer_exposed} nœud(s) sans exposition restante</span>
+                      <span>{projection.incidents_before} → {projection.incidents_after} incidents</span>
+                    </div>
+                    {projection.nodes.some((n) => n.reduction > 0) && (
+                      <div className="risk-preview-list">
+                        <b>Principales diminutions estimées</b>
+                        {projection.nodes.filter((n) => n.reduction > 0).slice(0, 5).map((n) => (
+                          <div key={n.id}>
+                            <span>{NATURES_FR[n.kind] || "Infrastructure"} · {n.name}</span>
+                            <strong>{n.before} → {n.after}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <small>{projection.note} La situation peut évoluer : relancez le calcul pour l'actualiser.</small>
+                  </div>
+                )}
               </div>
             )}
             <div className="section-titre">Pourquoi ce risque ?</div>

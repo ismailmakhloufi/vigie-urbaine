@@ -178,7 +178,7 @@ def _propagation_rows(event_type: str, target_id: str) -> list[dict]:
     )
 
 
-def compute_impact(event_id: str) -> ImpactSummary:
+def compute_impact(event_id: str, active_incidents: int | None = None) -> ImpactSummary:
     """
     Calcule l'impact d'un événement réellement enregistré.
     """
@@ -205,6 +205,7 @@ def compute_impact(event_id: str) -> ImpactSummary:
         severity=event["severity"],
         target_id=event["target_id"],
         event_id=event_id,
+        active_incidents=active_incidents,
     )
 
 
@@ -229,6 +230,7 @@ def build_impact(
     severity: str,
     target_id: str,
     event_id: str | None,
+    active_incidents: int | None = None,
 ) -> ImpactSummary:
     """
     Construit le résumé final d'impact :
@@ -239,7 +241,8 @@ def build_impact(
     - classification du risque.
     """
     rows = _propagation_rows(event_type, target_id)
-    active_incidents = _active_incidents()
+    if active_incidents is None:
+        active_incidents = _active_incidents()
 
     best_rows: dict[str, dict] = {}
 

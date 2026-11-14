@@ -594,6 +594,28 @@ button { font: inherit; }
 .risk-chain li b, .risk-chain li small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .risk-chain li b { font-size: 11px; }
 .risk-chain li small { font-size: 9px; }
+.risk-projection { margin: 10px 0 13px; padding: 10px; border: 1px solid rgba(255, 176, 32, 0.35); background: rgba(255, 176, 32, 0.035); }
+.risk-preview-button {
+  width: 100%; padding: 7px 9px; cursor: pointer;
+  border: 1px solid var(--ambre); color: var(--ambre-doux);
+  background: rgba(255, 176, 32, 0.09); font-weight: 700; font-size: 11px;
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%);
+}
+.risk-preview-button:hover:not(:disabled) { background: rgba(255, 176, 32, 0.2); }
+.risk-preview-button:disabled { opacity: 0.6; cursor: wait; }
+.risk-preview-result { margin-top: 10px; font-size: 10px; }
+.risk-preview-result > p { color: var(--ambre-doux); font-weight: 700; margin-bottom: 7px; }
+.risk-preview-result > small { display: block; line-height: 1.45; margin-top: 8px; }
+.risk-preview-score { display: grid; gap: 3px; padding: 8px; border-left: 3px solid var(--ambre); background: var(--bg-panel-2); }
+.risk-preview-score > strong { color: var(--ambre); font: 17px var(--font-mono); }
+.risk-preview-score > small { color: var(--ink-dim); }
+.risk-preview-totals { display: grid; gap: 3px; margin: 8px 0; color: var(--ink-dim); }
+.risk-preview-totals span::before { content: "› "; color: var(--ambre); }
+.risk-preview-list { display: grid; gap: 5px; padding-top: 7px; border-top: 1px solid var(--line); }
+.risk-preview-list > b { color: var(--ambre-doux); }
+.risk-preview-list > div { display: flex; justify-content: space-between; gap: 8px; }
+.risk-preview-list > div span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.risk-preview-list > div strong { white-space: nowrap; color: var(--vert); font: 10px var(--font-mono); }
 .risk-meter { height: 5px; background: #171e2a; overflow: hidden; margin: 10px 0 12px; }
 .risk-meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cyan), var(--ambre), var(--rouge)); }
 .risk-reasons { list-style: none; display: flex; flex-direction: column; gap: 5px; }
