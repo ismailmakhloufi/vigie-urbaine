@@ -68,8 +68,7 @@ def _propagation_rows(event_type: str, target_id: str) -> list[dict]:
             f"""
             MATCH (r:Road:Infrastructure {{id: $target_id}})
 
-            CALL {{
-                WITH r
+            CALL (r) {{
 
                 MATCH p = (x:Infrastructure)-[:CONNECTED_BY*1..{MAX_PROPAGATION_DEPTH}]->(r)
 
@@ -79,11 +78,10 @@ def _propagation_rows(event_type: str, target_id: str) -> list[dict]:
                     x.name AS name,
                     length(p) AS depth,
                     x.criticality AS criticality,
-                    x.backup_power_hours AS backup_power_hours
+                    x.backup_power_hours AS backup_power_hours,
+                    [n IN reverse(nodes(p)) | {{id: n.id, name: n.name, kind: n.kind}}] AS chain
 
                 UNION
-
-                WITH r
 
                 MATCH q = (warehouse:Warehouse:Infrastructure)
                           -[:CONNECTED_BY*1..{MAX_PROPAGATION_DEPTH}]->(r)
@@ -95,7 +93,9 @@ def _propagation_rows(event_type: str, target_id: str) -> list[dict]:
                     service.name AS name,
                     length(q) + 1 AS depth,
                     service.criticality AS criticality,
-                    service.backup_power_hours AS backup_power_hours
+                    service.backup_power_hours AS backup_power_hours,
+                    [n IN reverse(nodes(q)) | {{id: n.id, name: n.name, kind: n.kind}}]
+                      + [{{id: service.id, name: service.name, kind: service.kind}}] AS chain
             }}
 
             RETURN DISTINCT
@@ -104,7 +104,8 @@ def _propagation_rows(event_type: str, target_id: str) -> list[dict]:
                 name,
                 depth,
                 criticality,
-                backup_power_hours
+                backup_power_hours,
+                chain
             """,
             {"target_id": target_id},
         )
@@ -114,8 +115,7 @@ def _propagation_rows(event_type: str, target_id: str) -> list[dict]:
             f"""
             MATCH (z:Zone:Infrastructure {{id: $target_id}})
 
-            CALL {{
-                WITH z
+            CALL (z) {{
 
                 MATCH (x:Infrastructure)-[:LOCATED_IN]->(z)
                 WHERE NOT x:Zone
@@ -126,11 +126,11 @@ def _propagation_rows(event_type: str, target_id: str) -> list[dict]:
                     x.name AS name,
                     1 AS depth,
                     x.criticality AS criticality,
-                    x.backup_power_hours AS backup_power_hours
+                    x.backup_power_hours AS backup_power_hours,
+                    [{{id: z.id, name: z.name, kind: z.kind}},
+                       {{id: x.id, name: x.name, kind: x.kind}}] AS chain
 
                 UNION
-
-                WITH z
 
                 MATCH (r:Road:Infrastructure)-[:LOCATED_IN]->(z)
                 MATCH p = (x:Infrastructure)-[:CONNECTED_BY*1..{MAX_PROPAGATION_DEPTH}]->(r)
@@ -142,7 +142,9 @@ def _propagation_rows(event_type: str, target_id: str) -> list[dict]:
                     x.name AS name,
                     length(p) + 1 AS depth,
                     x.criticality AS criticality,
-                    x.backup_power_hours AS backup_power_hours
+                    x.backup_power_hours AS backup_power_hours,
+                    [{{id: z.id, name: z.name, kind: z.kind}}]
+                      + [n IN reverse(nodes(p)) | {{id: n.id, name: n.name, kind: n.kind}}] AS chain
             }}
 
             RETURN DISTINCT
@@ -151,7 +153,8 @@ def _propagation_rows(event_type: str, target_id: str) -> list[dict]:
                 name,
                 depth,
                 criticality,
-                backup_power_hours
+                backup_power_hours,
+                chain
             """,
             {"target_id": target_id},
         )
@@ -168,7 +171,8 @@ def _propagation_rows(event_type: str, target_id: str) -> list[dict]:
             x.name AS name,
             length(p) AS depth,
             x.criticality AS criticality,
-            x.backup_power_hours AS backup_power_hours
+            x.backup_power_hours AS backup_power_hours,
+            [n IN reverse(nodes(p)) | {{id: n.id, name: n.name, kind: n.kind}}] AS chain
         """,
         {"target_id": target_id},
     )
@@ -248,7 +252,10 @@ def build_impact(
 
         current = best_rows.get(node_id)
 
-        if current is None or depth < current["depth"]:
+        if (current is None or depth < current["depth"] or
+                (depth == current["depth"] and
+                 [n["id"] for n in row.get("chain") or []] <
+                 [n["id"] for n in current.get("chain") or []])):
             best_rows[node_id] = row
 
     impacts: list[ImpactNode] = []
@@ -259,7 +266,7 @@ def build_impact(
 
         score, reasons = score_node(
             kind=kind,
-            depth=min(depth, 2),
+            depth=depth,
             criticality=int(row.get("criticality") or 0),
             backup_power_hours=row.get("backup_power_hours"),
             severity=severity,
@@ -275,6 +282,7 @@ def build_impact(
                 score=score,
                 risk=risk_class(score),
                 reasons=reasons,
+                chain=row.get("chain") or [],
             )
         )
 
@@ -290,4 +298,3 @@ def build_impact(
         total_count=len(impacts),
         max_depth=max((impact.depth for impact in impacts), default=0),
     )
-

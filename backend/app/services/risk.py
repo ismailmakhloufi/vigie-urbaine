@@ -132,9 +132,9 @@ def score_node(
     severity_points = SEVERITY_POINTS.get(severity, 0)
     if severity_points:
         score += severity_points
+        severity_fr = {"HIGH": "élevée", "CRITICAL": "critique"}.get(severity, severity)
         reasons.append(
-            f"sévérité {severity} (+{severity_points})"
+            f"sévérité {severity_fr} (+{severity_points})"
         )
 
     return min(score, 100), reasons
-

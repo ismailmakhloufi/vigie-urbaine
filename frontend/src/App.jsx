@@ -121,6 +121,8 @@ export default function App() {
   const [risqueSelectionne, setRisqueSelectionne] = useState(null);
   const [cascade, setCascade] = useState(null);
   const [plan, setPlan] = useState(null);
+  const [sourceEventId, setSourceEventId] = useState(null);
+  const analyseRequest = useRef(0);
   const [chat, setChat] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
@@ -261,46 +263,58 @@ export default function App() {
     ["EN_ROUTE", "DIVERTED", "BLOCKED"].includes(m.status)
   );
 
-  const chargerCascade = async (id) => {
-    const incident = (risque?.incident_list || []).find(
-      (item) => item.target_id === id
-    );
-    if (!incident) {
-      setCascade(null);
-      setPlan(null);
-      return;
-    }
+  const risqueAffiche = risqueSelectionne ? riskById[risqueSelectionne.id] || null : null;
+  const sourceActive = risqueAffiche?.sources?.find((source) => source.event_id === sourceEventId)
+    || risqueAffiche?.sources?.[0];
+
+  const chargerCascade = async (eventId) => {
+    const demande = ++analyseRequest.current;
+    setCascade(null);
+    setPlan(null);
+    if (!eventId) return;
     try {
-      setCascade(await getEventImpact(incident.event_id));
-      setPlan(await getEventRecommendations(incident.event_id));
+      const [impact, recommandations] = await Promise.all([
+        getEventImpact(eventId), getEventRecommendations(eventId),
+      ]);
+      if (demande !== analyseRequest.current) return;
+      setCascade(impact);
+      setPlan(recommandations);
     } catch {
+      if (demande !== analyseRequest.current) return;
       setCascade(null);
       setPlan(null);
     }
   };
 
+  const choisirSource = (eventId) => {
+    setSourceEventId(eventId);
+    chargerCascade(eventId);
+  };
+
   const gererSelection = (node) => {
     setCible(node);
-    setRisqueSelectionne(riskById[node.id] || null);
+    const selection = riskById[node.id] || null;
+    setRisqueSelectionne(selection);
     setPrediction(null);
     setFantomes([]);
-    chargerCascade(node.id);
+    choisirSource(selection?.sources?.[0]?.event_id);
   };
 
   const ouvrirRisque = (node) => {
     const infrastructure = infra.find((item) => item.id === node.id);
     if (infrastructure) setCible(infrastructure);
     setRisqueSelectionne(node);
-    chargerCascade(node.id);
+    choisirSource(node.sources?.[0]?.event_id);
   };
 
   // Les cartes indicatrices mènent directement à l'essentiel
   const ciblerIncident = (incident) => {
     const infraNode = infra.find((item) => item.id === incident.target_id);
     if (infraNode) setCible(infraNode);
-    setRisqueSelectionne(riskById[incident.target_id] || null);
-    if (!riskById[incident.target_id]) setCascade(null);
-    chargerCascade(incident.target_id);
+    const selection = riskById[incident.target_id] || null;
+    setRisqueSelectionne(selection);
+    choisirSource(selection?.sources?.find((s) => s.event_id === incident.event_id)?.event_id
+      || selection?.sources?.[0]?.event_id);
   };
 
   const allerVers = (idCible) => {
@@ -845,6 +859,8 @@ export default function App() {
           vaguesCascades={vagues}
           fantomes={fantomes}
           riskById={riskById}
+          chaineRisque={sourceActive?.chain || []}
+          sourceRisqueId={sourceActive?.event_id}
           itineraires={plan?.detours || []}
           missions={missionsActives}
           options={comparateur?.options || []}
@@ -943,29 +959,59 @@ export default function App() {
           <span>{nodesAtRisk.length} nœuds</span>
         </div>
 
-        {risqueSelectionne ? (
+        {risqueAffiche ? (
           <section className="risk-focus" id="panneau-focus">
             <div className="risk-focus-top">
-              <div className="risk-score-large">{risqueSelectionne.score}</div>
+              <div className="risk-score-large">{sourceActive?.score ?? risqueAffiche.score}</div>
               <div>
-                <RiskBadge risk={risqueSelectionne.risk} />
-                <h3>{risqueSelectionne.name}</h3>
-                <small>{risqueSelectionne.kind} · {risqueSelectionne.id}</small>
+                <RiskBadge risk={sourceActive ? (sourceActive.score >= 70 ? "CRITICAL" : sourceActive.score >= 50 ? "HIGH" : sourceActive.score >= 30 ? "MEDIUM" : "LOW") : risqueAffiche.risk} />
+                <h3>{risqueAffiche.name}</h3>
+                <small>{NATURES_FR[risqueAffiche.kind] || risqueAffiche.kind} · {risqueAffiche.id}</small>
               </div>
             </div>
             <div className="risk-meter">
-              <i style={{ width: `${risqueSelectionne.score}%` }} />
+              <i style={{ width: `${sourceActive?.score ?? risqueAffiche.score}%` }} />
             </div>
+            <p className="risk-method">Score estimé par incident, de 0 à 100. Le risque global retient le score le plus élevé, sans additionner les incidents.</p>
+            <div className="section-titre">Incidents contributeurs ({risqueAffiche.sources?.length || 0})</div>
+            <div className="risk-sources">
+              {(risqueAffiche.sources || []).map((source) => (
+                <button
+                  key={source.event_id}
+                  className={`risk-source ${source.event_id === sourceActive?.event_id ? "actif" : ""}`}
+                  onClick={() => choisirSource(source.event_id)}
+                  aria-pressed={source.event_id === sourceActive?.event_id}
+                >
+                  <span>{ETYPES_FR[source.type] || source.type} · {source.target_id}</span>
+                  <b>{source.score}/100</b>
+                </button>
+              ))}
+            </div>
+            {sourceActive && (
+              <div className="risk-cause">
+                <div className="risk-cause-observe">Incident enregistré dans la simulation · {ETYPES_FR[sourceActive.type] || sourceActive.type} sur {sourceActive.target_id} · intensité {NIVEAU(sourceActive.severity)}</div>
+                <div className="risk-cause-model">Dépendances estimées par le graphe · {sourceActive.depth} {sourceActive.depth > 1 ? "liens" : "lien"} · tracé schématique, pas un trajet routier</div>
+                <ol className="risk-chain">
+                  {sourceActive.chain.map((etape, index) => (
+                    <li key={`${etape.id}-${index}`}>
+                      <span>{index === 0 ? "ORIGINE" : index === sourceActive.chain.length - 1 ? "CONSÉQUENCE" : `ÉTAPE ${index}`}</span>
+                      <b>{etape.name || etape.id}</b>
+                      <small>{NATURES_FR[etape.kind] || "Infrastructure"} · {etape.id}</small>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
             <div className="section-titre">Pourquoi ce risque ?</div>
             <ul className="risk-reasons">
-              {(risqueSelectionne.reasons || []).map((reason, i) => (
+              {(sourceActive?.reasons || risqueAffiche.reasons || []).map((reason, i) => (
                 <li key={i}>{reason}</li>
               ))}
             </ul>
-            {cascade && (
+            {cascade?.event_id === sourceActive?.event_id && (
               <>
                 <div className="section-titre" style={{ marginTop: 10 }}>
-                  Ce qu'il impacte ({cascade.total_count})
+                  Impacts estimés de cet incident ({cascade.total_count})
                 </div>
                 {cascade.impacts.length === 0 ? (
                   <div className="empty-state">Aucune propagation détectée.</div>
@@ -985,7 +1031,7 @@ export default function App() {
                 )}
               </>
             )}
-            {plan && (
+            {plan && cascade?.event_id === sourceActive?.event_id && (
               <section className="action-plan">
                 <div className="section-titre" style={{ marginTop: 10 }}>
                   📞 Plan d'action

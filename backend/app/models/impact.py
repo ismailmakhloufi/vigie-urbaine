@@ -9,6 +9,7 @@ class ImpactNode(BaseModel):
     score: int = 0
     risk: str = "LOW"
     reasons: list[str] = Field(default_factory=list)
+    chain: list[dict[str, str]] = Field(default_factory=list)
 
 
 class ImpactSummary(BaseModel):

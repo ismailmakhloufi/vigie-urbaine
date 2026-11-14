@@ -51,6 +51,8 @@ export default function MapView({
   vaguesCascades,
   fantomes,
   riskById = {},
+  chaineRisque = [],
+  sourceRisqueId,
   itineraires = [],
   missions = [],
   options = [],
@@ -59,6 +61,8 @@ export default function MapView({
   const couche = useRef(null);
   const coucheMissions = useRef(null);
   const coucheVariantes = useRef(null);
+  const coucheChaine = useRef(null);
+  const derniereChaine = useRef(null);
   const markers = useRef({});
 
   useEffect(() => {
@@ -78,6 +82,7 @@ export default function MapView({
     couche.current = L.layerGroup().addTo(carte.current);
     coucheMissions.current = L.layerGroup().addTo(carte.current);
     coucheVariantes.current = L.layerGroup().addTo(carte.current);
+    coucheChaine.current = L.layerGroup().addTo(carte.current);
 
     const resize = () => carte.current?.invalidateSize();
     setTimeout(resize, 150);
@@ -139,7 +144,7 @@ export default function MapView({
           .addTo(couche.current)
           .bindPopup(
             `<b>${node.name}</b><br>Zone météo` +
-              (risk ? `<br><b>Risque ${risk.risk} : ${risk.score}/100</b>` : "")
+              (risk ? `<br><b>Risque ${NIVEAU(risk.risk)} : ${risk.score}/100</b>` : "")
           );
 
         zone.on("click", () => onSelection(node));
@@ -289,6 +294,39 @@ export default function MapView({
   }, [infra, cibleId, fantomes, riskById, onSelection, itineraires]);
 
   useEffect(() => {
+    const layer = coucheChaine.current;
+    if (!layer) return;
+    layer.clearLayers();
+    const positions = new Map(infra.filter((n) => n.lat != null && n.lon != null)
+      .map((n) => [n.id, [n.lat, n.lon]]));
+    const etapes = chaineRisque.map((n) => positions.get(n.id));
+    const pts = etapes.filter(Boolean);
+    if (pts.length < 2) {
+      derniereChaine.current = null;
+      return;
+    }
+    for (let i = 1; i < etapes.length; i++) {
+      if (!etapes[i - 1] || !etapes[i]) continue;
+      L.polyline([etapes[i - 1], etapes[i]], {
+        color: "#ffb020", weight: 4, opacity: 0.95, dashArray: "7 7",
+        lineCap: "round",
+      }).addTo(layer).bindPopup("Lien de dépendance modélisé — pas un trajet routier");
+    }
+    pts.forEach((point, index) => {
+      L.circleMarker(point, {
+        radius: index === 0 ? 8 : 5,
+        color: "#ffb020", fillColor: index === 0 ? "#ff4d5e" : "#ffb020",
+        fillOpacity: 1, weight: 2,
+      }).addTo(layer);
+    });
+    const cle = `${sourceRisqueId}-${chaineRisque.at(-1)?.id}`;
+    if (carte.current && cle !== derniereChaine.current) {
+      derniereChaine.current = cle;
+      carte.current.fitBounds(pts, { padding: [45, 45], maxZoom: 14, animate: true });
+    }
+  }, [infra, chaineRisque, sourceRisqueId]);
+
+  useEffect(() => {
     if (!vaguesCascades?.length) return;
 
     const timers = [];
@@ -430,6 +468,7 @@ export default function MapView({
         <span><i className="puce status-down-dot" /> Hors service</span>
         <span><i className="puce status-cyber-dot" /> Compromis</span>
         <span><i className="puce whatif-dot" /> Simulation</span>
+        {chaineRisque.length > 1 && <span><i className="puce chaine-dot" /> Dépendance estimée</span>}
       </div>
     </>
   );
