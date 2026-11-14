@@ -27,8 +27,12 @@ class MongoDbClient:
         return event
 
     def set_event_status(self, event_id: str, status: str):
+        from datetime import datetime, timezone
+        fields = {"status": status}
+        if status == "RESOLVED":
+            fields["resolved_at"] = datetime.now(timezone.utc)
         return self._db.events.update_one(
-            {"_id": ObjectId(event_id)}, {"$set": {"status": status}}
+            {"_id": ObjectId(event_id)}, {"$set": fields}
         )
 
     def count_active_events(self) -> int:
@@ -45,6 +49,13 @@ class MongoDbClient:
     def list_events(self, limit: int = 50) -> list[dict]:
         events = self._db.events.find({}, {"_id": 0}).sort("timestamp", -1).limit(limit)
         return list(events)
+
+    def record_risk_transition(self, transition: dict):
+        self._db.risk_transitions.insert_one(transition)
+
+    def list_risk_transitions(self, limit: int = 12) -> list[dict]:
+        return list(self._db.risk_transitions.find({}, {"_id": 0})
+                    .sort("recorded_at", -1).limit(limit))
 
     def insert_mission(self, mission: dict):
         return self._db.missions.insert_one(mission)

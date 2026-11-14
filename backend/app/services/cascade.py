@@ -286,6 +286,8 @@ def build_impact(
                 risk=risk_class(score),
                 reasons=reasons,
                 chain=row.get("chain") or [],
+                criticality=int(row.get("criticality") or 0),
+                backup_power_hours=row.get("backup_power_hours"),
             )
         )
 

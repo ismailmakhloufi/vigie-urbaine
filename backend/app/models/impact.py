@@ -10,6 +10,8 @@ class ImpactNode(BaseModel):
     risk: str = "LOW"
     reasons: list[str] = Field(default_factory=list)
     chain: list[dict[str, str]] = Field(default_factory=list)
+    criticality: int = 0
+    backup_power_hours: float | None = None
 
 
 class ImpactSummary(BaseModel):

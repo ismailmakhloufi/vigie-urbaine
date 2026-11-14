@@ -197,6 +197,15 @@ def resolve_event(event_id: str):
             "message": "event already resolved",
         }
 
+    # Ces deux lectures sont informatives : une indisponibilité du moteur de
+    # risque ne doit jamais empêcher la résolution réelle de l'incident.
+    from app.routes.risk import risk_overview
+    try:
+        risk_before = risk_overview()
+    except Exception as exc:
+        print(f"[risk] historique avant résolution indisponible : {exc}")
+        risk_before = None
+
     previous_status = event.get("previous_status")
     restored = False
 
@@ -222,6 +231,33 @@ def resolve_event(event_id: str):
 
     mongo_client.set_event_status(event_id, "RESOLVED")
 
+    if risk_before is not None:
+        try:
+            risk_after = risk_overview()
+            before_nodes = {n["id"]: n for n in risk_before["nodes_at_risk"]}
+            after_nodes = {n["id"]: n for n in risk_after["nodes_at_risk"]}
+            changed = [
+                {"id": ident, "name": n["name"], "before": n["score"],
+                 "after": after_nodes.get(ident, {}).get("score", 0)}
+                for ident, n in before_nodes.items()
+                if n["score"] != after_nodes.get(ident, {}).get("score", 0)
+            ]
+            changed.sort(key=lambda n: (-(n["before"] - n["after"]), n["id"]))
+            mongo_client.record_risk_transition({
+                "event_id": event_id,
+                "event_type": event["type"],
+                "target_id": event["target_id"],
+                "recorded_at": datetime.now(timezone.utc),
+                "before_incidents": risk_before["active_incidents"],
+                "after_incidents": risk_after["active_incidents"],
+                "before_high": risk_before["counts_by_class"]["HIGH"] + risk_before["counts_by_class"]["CRITICAL"],
+                "after_high": risk_after["counts_by_class"]["HIGH"] + risk_after["counts_by_class"]["CRITICAL"],
+                "changed_count": len(changed),
+                "top_changes": changed[:5],
+            })
+        except Exception as exc:
+            print(f"[risk] historique après résolution indisponible : {exc}")
+
     return {
         "id": event_id,
         "status": "RESOLVED",
@@ -229,4 +265,3 @@ def resolve_event(event_id: str):
         "previous_status": previous_status,
         "restored": restored,
     }
-

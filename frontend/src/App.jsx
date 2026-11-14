@@ -12,6 +12,8 @@ import {
   getInfrastructure,
   getRisk,
   getInterventionPreview,
+  getDecisionRanking,
+  getRiskEvolution,
   getEvents,
   getEventImpact,
   getEventRecommendations,
@@ -107,6 +109,28 @@ function RiskBadge({ risk }) {
   );
 }
 
+function AccesIntervention({ access }) {
+  if (access?.status === "REACHABLE") {
+    return <span>🚙 Accès estimé : {access.minutes} min depuis {access.base_id} ({access.vehicle})</span>;
+  }
+  if (access?.status === "NO_VEHICLE") return <span>⚠ Aucun véhicule disponible actuellement</span>;
+  return <span>⚠ Aucun accès routier calculable depuis la flotte disponible</span>;
+}
+
+function ScenarioCompare({ scenario }) {
+  return (
+    <div className="decision-comparison-card">
+      <b>{ETYPES_FR[scenario.event_type] || scenario.event_type} · {scenario.target_id}</b>
+      <strong>{scenario.hospital_points} points estimés pour les hôpitaux</strong>
+      <span>{scenario.hospital_count} hôpital(s) · {scenario.changed_count} nœud(s) amélioré(s)</span>
+      <span>{scenario.total_points} points de réduction cumulés (non additionnés au score global)</span>
+      <AccesIntervention access={scenario.access} />
+      <small>{scenario.nodes.filter((n) => n.reduction > 0).slice(0, 3).map((n) =>
+        `${n.name} ${n.before} → ${n.after}`).join(" · ") || "Aucune baisse estimée"}</small>
+    </div>
+  );
+}
+
 export default function App() {
   const [infra, setInfra] = useState([]);
   const [risque, setRisque] = useState(null);
@@ -127,6 +151,11 @@ export default function App() {
   const [projection, setProjection] = useState(null);
   const [projectionBusy, setProjectionBusy] = useState(false);
   const projectionRequest = useRef(0);
+  const [decisions, setDecisions] = useState(null);
+  const [decisionsBusy, setDecisionsBusy] = useState(false);
+  const [scenarioId, setScenarioId] = useState(null);
+  const [compareId, setCompareId] = useState(null);
+  const [evolution, setEvolution] = useState([]);
   const [chat, setChat] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
@@ -210,6 +239,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const charger = () => getRiskEvolution().then(setEvolution).catch(() => {});
+    charger();
+    const timer = setInterval(charger, 20000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     const update = () =>
       setHorloge(new Date().toLocaleTimeString("fr-FR", { hour12: false }));
     update();
@@ -270,6 +306,26 @@ export default function App() {
   const risqueAffiche = risqueSelectionne ? riskById[risqueSelectionne.id] || null : null;
   const sourceActive = risqueAffiche?.sources?.find((source) => source.event_id === sourceEventId)
     || risqueAffiche?.sources?.[0];
+  const classementObsolete = decisions && (
+    decisions.scenarios.length !== (risque?.incident_list || []).length ||
+    decisions.scenarios.some((s) => !(risque?.incident_list || []).some((i) => i.event_id === s.event_id))
+  );
+  const scenarioA = decisions?.scenarios.find((s) => s.event_id === scenarioId);
+  const scenarioB = decisions?.scenarios.find((s) => s.event_id === compareId);
+
+  const chargerDecisions = async () => {
+    setDecisionsBusy(true);
+    try {
+      const resultat = await getDecisionRanking();
+      setDecisions({ ...resultat, calculated_at: new Date().toLocaleTimeString("fr-FR") });
+      setScenarioId(resultat.scenarios[0]?.event_id || null);
+      setCompareId(null);
+    } catch (exc) {
+      setToast(`Classement indisponible : ${exc.message}`);
+    } finally {
+      setDecisionsBusy(false);
+    }
+  };
 
   const chargerCascade = async (eventId) => {
     const demande = ++analyseRequest.current;
@@ -981,6 +1037,64 @@ export default function App() {
           <span>{nodesAtRisk.length} nœuds</span>
         </div>
 
+        <section className="decision-panel">
+          <div className="section-titre">Priorités d'intervention estimées</div>
+          <p>Classement analytique : bénéfice potentiel pour les hôpitaux, puis réduction totale des scores. Ce n'est pas un ordre opérationnel.</p>
+          <button className="risk-preview-button" onClick={chargerDecisions} disabled={decisionsBusy}>
+            {decisionsBusy ? "Calcul des scénarios…" : "Comparer les résolutions possibles"}
+          </button>
+          {decisions && (
+            <>
+              <small>Situation à {decisions.calculated_at} · scénarios indépendants · aucune intervention effectuée</small>
+              {classementObsolete && <div className="decision-obsolete">La situation a changé : relancez le calcul avant de décider.</div>}
+              {decisions.scenarios.length === 0 ? (
+                <div className="empty-state">Aucun incident actif à comparer.</div>
+              ) : (
+                <>
+                  <div className="decision-list">
+                    {decisions.scenarios.map((s, i) => (
+                      <button
+                        key={s.event_id}
+                        className={`decision-row ${scenarioId === s.event_id ? "actif" : ""}`}
+                        onClick={() => {
+                          setScenarioId(s.event_id);
+                          if (compareId === s.event_id) setCompareId(null);
+                        }}
+                        aria-pressed={scenarioId === s.event_id}
+                      >
+                        <b>#{i + 1} {ETYPES_FR[s.event_type] || s.event_type} · {s.target_id}</b>
+                        <span>{s.hospital_points} points hôpitaux · {s.changed_count} lieux améliorés</span>
+                        <AccesIntervention access={s.access} />
+                      </button>
+                    ))}
+                  </div>
+                  {scenarioA && (
+                    <div className="decision-comparison">
+                      <div className="section-titre">Comparer deux interventions</div>
+                      <label htmlFor="second-scenario">Seconde intervention (comparaison indépendante)</label>
+                      <select
+                        id="second-scenario"
+                        value={compareId || ""}
+                        onChange={(e) => setCompareId(e.target.value || null)}
+                      >
+                        <option value="">Choisir un autre incident…</option>
+                        {decisions.scenarios.filter((s) => s.event_id !== scenarioId).map((s) => (
+                          <option key={s.event_id} value={s.event_id}>
+                            {ETYPES_FR[s.event_type] || s.event_type} · {s.target_id}
+                          </option>
+                        ))}
+                      </select>
+                      <ScenarioCompare scenario={scenarioA} />
+                      {scenarioB && scenarioB.event_id !== scenarioA.event_id && <ScenarioCompare scenario={scenarioB} />}
+                      <small>Temps d'accès = trajet estimé depuis une base de véhicule disponible, avec blocages et trafic actuels. N'inclut ni mobilisation, ni réparation. Les bénéfices de deux interventions ne s'additionnent pas.</small>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </section>
+
         {risqueAffiche ? (
           <section className="risk-focus" id="panneau-focus">
             <div className="risk-focus-top">
@@ -1169,6 +1283,26 @@ export default function App() {
               ))
             )}
           </div>
+        </section>
+
+        <section className="evolution-panel">
+          <div className="section-titre">Évolution après résolutions</div>
+          <p>Mesures enregistrées avant et après une résolution effective dans la simulation. D'autres incidents peuvent évoluer entre les deux lectures.</p>
+          {evolution.length === 0 ? (
+            <div className="empty-state">Aucune résolution suivie depuis l'activation de l'historique.</div>
+          ) : evolution.map((item) => (
+            <details className="evolution-row" key={item.event_id}>
+              <summary>
+                <b>{ETYPES_FR[item.event_type] || item.event_type} · {item.target_id}</b>
+                <small>{new Date(item.recorded_at).toLocaleString("fr-FR")}</small>
+                <span>Risques élevés/critiques : {item.before_high} → {item.after_high}</span>
+              </summary>
+              <p>Incidents actifs : {item.before_incidents} → {item.after_incidents} · {item.changed_count} score(s) modifié(s)</p>
+              {(item.top_changes || []).map((n) => (
+                <div key={n.id}>{n.name} · {n.before} → {n.after}/100</div>
+              ))}
+            </details>
+          ))}
         </section>
 
         <section className="history-mini">
