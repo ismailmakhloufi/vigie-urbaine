@@ -28,6 +28,10 @@ export const signOut = () => apiFetch("/auth/logout", { method: "POST" });
 export const getAudit = () => apiFetch("/auth/audit?limit=8");
 export const getReplaySnapshots = () => apiFetch("/replay?limit=240");
 export const getReplaySnapshot = (id) => apiFetch(`/replay/${encodeURIComponent(id)}`);
+export const getNotifications = (state = "NEW") =>
+  apiFetch(`/notifications?state=${encodeURIComponent(state)}&limit=100`);
+export const acknowledgeNotification = (id) =>
+  apiFetch(`/notifications/${encodeURIComponent(id)}/acknowledge`, { method: "POST" });
 
 export const getInfrastructure = () => apiFetch("/infrastructure");
 export const getRisk = () => apiFetch("/risk");

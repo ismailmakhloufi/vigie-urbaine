@@ -21,6 +21,7 @@ from app.models.event import EventCreate
 from app.models.impact import ImpactSummary
 from app.services.cascade import compute_impact
 from app.services.recommendations import build_recommendations
+from app.services import notifications
 
 
 router = APIRouter(prefix="/events", tags=["Events"])
@@ -124,6 +125,7 @@ def create_event(event: EventCreate):
         },
     )
 
+    notifications.publish_safely(notifications.publish_event, event_id, doc)
     impact = compute_impact(event_id)
 
     return {
@@ -195,6 +197,7 @@ def resolve_event(event_id: str):
         )
 
     if event.get("status") == "RESOLVED":
+        notifications.publish_safely(notifications.resolve_event_notification, event_id)
         return {
             "id": event_id,
             "status": "RESOLVED",
@@ -234,6 +237,7 @@ def resolve_event(event_id: str):
         restored = bool(result)
 
     mongo_client.set_event_status(event_id, "RESOLVED")
+    notifications.publish_safely(notifications.resolve_event_notification, event_id)
 
     if risk_before is not None:
         try:

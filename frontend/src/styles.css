@@ -74,6 +74,41 @@ button { font: inherit; }
   color: var(--ambre); padding: 7px 10px; cursor: pointer; font: 10px var(--font-mono);
 }
 .replay-entry:hover { background: rgba(255, 176, 32, .2); }
+.notification-entry {
+  white-space: nowrap; padding: 7px 9px; cursor: pointer;
+  color: var(--ambre-doux); border: 1px solid rgba(255, 176, 32, .55);
+  background: rgba(255, 176, 32, .11); font: 10px var(--font-mono);
+}
+.notification-entry:hover { background: rgba(255, 176, 32, .2); }
+.notification-panel { border-top: 1px solid var(--line); padding-top: 8px; }
+.notification-panel > p { color: var(--ink-dim); font-size: 10px; margin: 5px 0 10px; }
+.notification-filters { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.notification-filters button {
+  padding: 5px; font: 9px var(--font-mono); cursor: pointer;
+  color: var(--ink-dim); background: var(--bg-panel-2); border: 1px solid var(--line);
+}
+.notification-filters button.actif { border-color: var(--ambre); color: var(--ambre); }
+.notification-list { display: grid; gap: 7px; max-height: 360px; overflow-y: auto; }
+.notification-card {
+  display: grid; gap: 4px; padding: 8px; background: var(--bg-panel-2);
+  border: 1px solid var(--line); border-left: 3px solid var(--ambre); font-size: 10px;
+}
+.notification-card.n-critical { border-left-color: var(--rouge); }
+.notification-card.n-low { border-left-color: var(--cyan); }
+.notification-heading { display: flex; justify-content: space-between; color: var(--ambre); font: 9px var(--font-mono); }
+.notification-card strong { color: var(--ink); }
+.notification-card p, .notification-card small { color: var(--ink-dim); line-height: 1.4; }
+.notification-card button {
+  justify-self: start; border: 1px solid var(--ambre); background: transparent;
+  color: var(--ambre); cursor: pointer; padding: 5px 7px; font: 9px var(--font-mono);
+}
+.notification-card button:disabled { opacity: .5; }
+.notification-error { color: var(--rouge); font-size: 10px; }
+@media (max-width: 1000px) {
+  .header { gap: 7px; }
+  .replay-entry, .notification-entry { font-size: 9px; padding: 5px; }
+  .header .titre p { display: none; }
+}
 .replay-screen { height: 100%; display: grid; grid-template-rows: 67px auto auto minmax(0, 1fr); background: var(--bg); }
 .replay-header {
   display: flex; align-items: center; justify-content: space-between; padding: 8px 20px;

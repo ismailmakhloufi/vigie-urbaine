@@ -16,6 +16,8 @@ import {
   getDecisionRanking,
   getRiskEvolution,
   getAudit,
+  getNotifications,
+  acknowledgeNotification,
   getEvents,
   getEventImpact,
   getEventRecommendations,
@@ -161,6 +163,10 @@ export default function App({ readonly = false, secured = false }) {
   const [evolution, setEvolution] = useState([]);
   const [audit, setAudit] = useState([]);
   const [replayOpen, setReplayOpen] = useState(false);
+  const [notificationFilter, setNotificationFilter] = useState("NEW");
+  const [notificationInbox, setNotificationInbox] = useState({ items: [], counts: {} });
+  const [notificationError, setNotificationError] = useState(null);
+  const [ackBusy, setAckBusy] = useState(null);
   const [chat, setChat] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
@@ -257,6 +263,28 @@ export default function App({ readonly = false, secured = false }) {
     const timer = setInterval(charger, 30000);
     return () => clearInterval(timer);
   }, [secured, readonly]);
+
+  useEffect(() => {
+    let active = true;
+    const charger = () => getNotifications(notificationFilter).then((result) => {
+      if (active) { setNotificationInbox(result); setNotificationError(null); }
+    }).catch((exc) => { if (active) setNotificationError(exc.message); });
+    charger();
+    const timer = setInterval(charger, 6000);
+    return () => { active = false; clearInterval(timer); };
+  }, [notificationFilter]);
+
+  const accuserNotification = async (id) => {
+    setAckBusy(id);
+    try {
+      await acknowledgeNotification(id);
+      setNotificationInbox(await getNotifications(notificationFilter));
+    } catch (exc) {
+      setNotificationError(exc.message);
+    } finally {
+      setAckBusy(null);
+    }
+  };
 
   useEffect(() => {
     const update = () =>
@@ -613,6 +641,12 @@ export default function App({ readonly = false, secured = false }) {
         <button className="replay-entry" onClick={() => setReplayOpen(true)}>
           ◷ Relecture de crise
         </button>
+        <button className="notification-entry" onClick={() => {
+          setNotificationFilter("NEW");
+          document.getElementById("section-notifications")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }} aria-label={`${notificationInbox.counts.NEW || 0} notifications à traiter`}>
+          🔔 {notificationInbox.counts.NEW || 0} à traiter
+        </button>
 
         <div className={`city-status status-${cityStatus.toLowerCase()}`}>
           <small>ÉTAT DE LA VILLE</small>
@@ -761,6 +795,44 @@ export default function App({ readonly = false, secured = false }) {
                 </span>
                 <small>{a.assigned_vehicle || a.queue_reason || a.note || ""}</small>
               </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="notification-panel" id="section-notifications">
+          <div className="section-titre">Centre de notifications</div>
+          <p>Alertes conservées en base · actualisation toutes les 6 secondes.</p>
+          <div className="notification-filters" role="group" aria-label="État des notifications">
+            {[
+              ["NEW", "À traiter"], ["ACKNOWLEDGED", "Pris en compte"], ["RESOLVED", "Résolus"],
+            ].map(([state, label]) => (
+              <button key={state} className={notificationFilter === state ? "actif" : ""}
+                onClick={() => setNotificationFilter(state)} aria-pressed={notificationFilter === state}>
+                {label} · {notificationInbox.counts[state] || 0}
+              </button>
+            ))}
+          </div>
+          {notificationError && <div className="notification-error" role="alert">Notifications indisponibles : {notificationError}</div>}
+          {notificationInbox.items.length === 0 && !notificationError && (
+            <div className="empty-state">Aucune notification dans cette catégorie.</div>
+          )}
+          <div className="notification-list">
+            {notificationInbox.items.map((item) => (
+              <article className={`notification-card n-${item.severity.toLowerCase()}`} key={item.id}>
+                <div className="notification-heading">
+                  <b>{item.category === "INCIDENT" ? "⚠ Incident" : item.category === "CALL" ? "☎ Appel" : "🚙 Mission"}</b>
+                  <span>{NIVEAU(item.severity)}</span>
+                </div>
+                <strong>{item.title} · {item.location_id}</strong>
+                <p>{item.detail}</p>
+                <small>{item.producer} · {new Date(item.created_at).toLocaleString("fr-FR")}</small>
+                {item.state === "NEW" && !readonly && (
+                  <button disabled={ackBusy === item.id} onClick={() => accuserNotification(item.id)}>
+                    {ackBusy === item.id ? "Enregistrement…" : "Prendre en compte"}
+                  </button>
+                )}
+                {item.acknowledged_by && <small>Pris en compte par {item.acknowledged_by}</small>}
+              </article>
             ))}
           </div>
         </section>

@@ -55,6 +55,8 @@ class OperationalJourneyTests(unittest.TestCase):
         vehicle = call["assigned_vehicle"]
         self.assertEqual(self.db.vehicles.find_one({"callsign": vehicle})["status"], "ON_MISSION")
         self.assertEqual(self.db.missions.count_documents({"call_id": call["call_id"]}), 1)
+        call_notification = self.db.notifications.find_one({"source_key": f"call:{call['call_id']}"})
+        self.assertEqual(call_notification["state"], "NEW")
 
         future = datetime.now(timezone.utc) + timedelta(minutes=10)
         with patch("app.services.missions._now", return_value=future):
@@ -66,6 +68,7 @@ class OperationalJourneyTests(unittest.TestCase):
         with patch("app.services.fleet._now", return_value=future):
             self.client.get("/fleet")
         self.assertEqual(self.db.vehicles.find_one({"callsign": vehicle})["status"], "AVAILABLE")
+        self.assertEqual(self.db.notifications.count_documents({"category": "MISSION"}), 1)
         self.assertEqual(self.client.get("/integration/calls").json()[0]["mission_id"], call["mission_id"])
 
     def test_route_bloquee_puis_ouverte_l_appel_repart_une_seule_fois(self):
@@ -133,6 +136,7 @@ class OperationalJourneyTests(unittest.TestCase):
             self.assertEqual(created.status_code, 201, created.text)
             event_id = created.json()["id"]
             self.assertEqual(graph["status"], "BLOCKED")
+            self.assertEqual(self.db.notifications.find_one({"source_key": f"event:{event_id}"})["state"], "NEW")
             self.assertEqual(self.client.get("/risk").json()["active_incidents"], 1)
 
             predicted = self.client.get(f"/risk/intervention/{event_id}")
@@ -143,6 +147,7 @@ class OperationalJourneyTests(unittest.TestCase):
             resolved = self.client.post(f"/events/{event_id}/resolve")
             self.assertEqual(resolved.status_code, 200, resolved.text)
             self.assertEqual(graph["status"], "CLEAR")
+            self.assertEqual(self.db.notifications.find_one({"source_key": f"event:{event_id}"})["state"], "RESOLVED")
             self.assertEqual(self.client.get("/risk").json()["active_incidents"], 0)
             history = self.client.get("/risk/evolution").json()
             self.assertEqual(history[0]["event_id"], event_id)

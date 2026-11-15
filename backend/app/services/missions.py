@@ -162,6 +162,8 @@ def _tick_mission(doc: dict) -> dict:
             "position": doc["position"],
             "timeline": doc["timeline"],
         })
+        from app.services import notifications
+        notifications.publish_safely(notifications.publish_mission, doc, "ARRIVED")
         # le convoi ne reste pas sur place : il regagne sa base
         _release_vehicle(doc, status="RETURNING")
         return doc
@@ -214,6 +216,8 @@ def _tick_mission(doc: dict) -> dict:
                 "position": position,
                 "timeline": doc["timeline"],
             })
+            from app.services import notifications
+            notifications.publish_safely(notifications.publish_mission, doc, "BLOCKED")
             _release_vehicle(doc)
             return doc
 

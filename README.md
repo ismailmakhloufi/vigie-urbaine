@@ -23,6 +23,12 @@ Un instantané de la situation est conservé toutes les **30 secondes** dans `cr
 
 Ces archives ne reconstruisent **pas** la période antérieure à leur activation ; les scores passés ne sont jamais recalculés avec le graphe actuel. MongoDB et Neo4j sont lus successivement dans une courte fenêtre, pas dans une transaction commune. La carte utilise la géométrie de référence actuelle, mais les statuts et scores enregistrés. L'archive n'exécute aucune action sur la crise vivante.
 
+## Centre de notifications
+
+Les incidents, appels et arrivées/blocages de mission créent des alertes conservées dans MongoDB (`notifications`). Chaque alerte affiche le lieu, l'heure, la source, la gravité et l'état **à traiter / pris en compte / résolu**. La prise en compte par un opérateur ne résout pas l'incident : elle enregistre uniquement qui a vu l'alerte. Les incidents résolus passent automatiquement à « résolu ». Les événements encore actifs et les appels en attente sont retrouvés au démarrage ; l'historique clos n'est pas transformé en nouvelles alertes. La console actualise la boîte toutes les six secondes. En mode sécurisé, l'observateur peut lire mais pas acquitter.
+
+Pour cette première étape, les notifications ne centrent pas encore la carte et ne contiennent **aucune projection de propagation**. L'étiquetage « observé / estimé » détaillé et la reprise des signaux sonores seront traités séparément.
+
 ## Vérification
 
 Pour les tests, installer `backend/requirements-dev.txt`. Depuis `backend` : `python -m unittest discover -s tests -v`. Depuis `frontend` : `npm test` puis `npm run build`. Les parcours HTTP isolés utilisent Mongo en mémoire et un graphe routier contrôlé : ils vérifient appel → mission → arrivée → retour à base et incident → projection → résolution → historique sans modifier les bases de la simulation en cours. Les tests couvrent aussi les accès anonymes, les rôles, la clé d'agence et l'échappement des textes de la carte.

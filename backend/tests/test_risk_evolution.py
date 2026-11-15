@@ -16,12 +16,13 @@ def snapshot(incidents, score):
 
 
 class RiskEvolutionTests(unittest.TestCase):
+    @patch("app.routes.events.notifications.publish_safely")
     @patch("app.db.mongo_client.mongo_client.record_risk_transition")
     @patch("app.db.mongo_client.mongo_client.set_event_status")
     @patch("app.routes.risk.risk_overview")
     @patch("app.db.mongo_client.mongo_client.get_event")
     def test_transition_enregistree_apres_resolution(
-        self, get_event, overview, set_status, record,
+        self, get_event, overview, set_status, record, _notify,
     ):
         get_event.return_value = {"status": "ACTIVE", "type": "ROAD_BLOCKED",
                                   "target_id": "R1", "previous_status": None}
@@ -33,13 +34,14 @@ class RiskEvolutionTests(unittest.TestCase):
         self.assertEqual((transition["before_high"], transition["after_high"]), (1, 0))
         self.assertEqual(transition["top_changes"][0]["after"], 0)
 
+    @patch("app.routes.events.notifications.publish_safely")
     @patch("app.db.mongo_client.mongo_client.set_event_status")
     @patch("app.routes.risk.risk_overview", side_effect=RuntimeError("risque indisponible"))
     @patch("app.db.mongo_client.mongo_client.get_event", return_value={
         "status": "ACTIVE", "type": "ROAD_BLOCKED", "target_id": "R1",
         "previous_status": None,
     })
-    def test_risque_indisponible_ne_bloque_pas_la_resolution(self, _event, _risk, set_status):
+    def test_risque_indisponible_ne_bloque_pas_la_resolution(self, _event, _risk, set_status, _notify):
         self.assertEqual(resolve_event("e1")["status"], "RESOLVED")
         set_status.assert_called_once_with("e1", "RESOLVED")
 

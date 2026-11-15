@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from app.db.mongo_client import mongo_client
 from app.db.neo4j_client import neo4j_client
 from app.services import fleet
+from app.services import notifications
 from app.services.missions import RouteUnavailable, create_mission
 
 # le type d'urgence conduit au type de mission
@@ -143,6 +144,7 @@ def create_call(kind: str, destination_id: str, note: str = "") -> dict:
     }
 
     mongo_client.insert_call(call)
+    notifications.publish_safely(notifications.publish_call, call)
     status, chosen, mission = _dispatch(call, coords)
     call["status"] = status
     if mission:
