@@ -25,12 +25,12 @@ Ces archives ne reconstruisent **pas** la période antérieure à leur activatio
 
 ## Vérification
 
-Depuis `backend` : `python -m unittest discover -s tests -v`. Depuis `frontend` : `npm test` puis `npm run build`. Les tests de sécurité vérifient notamment les accès anonymes, les rôles, l'origine des mutations, la clé d'agence et l'échappement des textes de la carte.
+Pour les tests, installer `backend/requirements-dev.txt`. Depuis `backend` : `python -m unittest discover -s tests -v`. Depuis `frontend` : `npm test` puis `npm run build`. Les parcours HTTP isolés utilisent Mongo en mémoire et un graphe routier contrôlé : ils vérifient appel → mission → arrivée → retour à base et incident → projection → résolution → historique sans modifier les bases de la simulation en cours. Les tests couvrent aussi les accès anonymes, les rôles, la clé d'agence et l'échappement des textes de la carte.
 
 ## Étapes vers un prototype de production complet
 
 - Scénarios de crise **reproductibles** avec paramètres et amorce aléatoire contrôlés ; la relecture temporelle observée est livrée, mais n'est pas un moteur de rejeu déterministe des événements.
-- Parcours complets automatisés, tests de charge, pannes de MongoDB/Neo4j et mesures de latence avec objectifs chiffrés.
+- Parcours HTTP isolés livrés ; encore nécessaires : tests de bout en bout sur de vraies bases isolées, charge, pannes MongoDB/Neo4j et mesures de latence avec objectifs chiffrés.
 - Validation métier des dépendances et des scores de risques ; justification et incertitude explicites dans chaque recommandation.
 - Sauvegarde/restauration vérifiées, migrations, rétention des journaux, supervision et déploiement HTTPS reproductible.
 - Revue de sécurité et exercices opérateur avant toute utilisation hors du cadre de simulation.

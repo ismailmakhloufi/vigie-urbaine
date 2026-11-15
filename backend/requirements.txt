@@ -5,4 +5,3 @@ pymongo
 pydantic
 pydantic-settings
 python-dotenv
-httpx
