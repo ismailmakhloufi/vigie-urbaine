@@ -1556,15 +1556,9 @@ export default function App({ readonly = false, secured = false }) {
         </section>
       </aside>
 
-      <footer className="footer">
-        <span className={erreur ? "dot-error" : "dot-verte"} />
-        {erreur ? (
-          <span className="footer-error">{erreur}</span>
-        ) : (
-          <span>FastAPI · Neo4j · MongoDB · Open-Meteo</span>
-        )}
-        <span className="footer-right">Urban Butterfly · Jumeau numérique NoSQL</span>
-      </footer>
+      {erreur && <div className="connection-banner" role="alert">
+        <b>Connexion interrompue</b><span>{erreur}</span>
+      </div>}
     </div>
   );
 }
