@@ -57,6 +57,8 @@ export default function MapView({
   itineraires = [],
   missions = [],
   options = [],
+  notificationFocus = null,
+  onCloseNotification,
   replay = false,
 }) {
   const carte = useRef(null);
@@ -66,6 +68,7 @@ export default function MapView({
   const coucheChaine = useRef(null);
   const derniereChaine = useRef(null);
   const markers = useRef({});
+  const lastNotificationFocus = useRef(null);
 
   useEffect(() => {
     if (carte.current) return;
@@ -326,11 +329,23 @@ export default function MapView({
       }).addTo(layer);
     });
     const cle = `${sourceRisqueId}-${chaineRisque.at(-1)?.id}`;
+    if (notificationFocus) {
+      derniereChaine.current = cle; // garder le lieu de l'alerte au centre, même après l'analyse asynchrone
+      return;
+    }
     if (carte.current && cle !== derniereChaine.current) {
       derniereChaine.current = cle;
       carte.current.fitBounds(pts, { padding: [45, 45], maxZoom: 14, animate: true });
     }
-  }, [infra, chaineRisque, sourceRisqueId]);
+  }, [infra, chaineRisque, sourceRisqueId, notificationFocus]);
+
+  useEffect(() => {
+    if (!notificationFocus || !carte.current || lastNotificationFocus.current === notificationFocus.focusKey) return;
+    const node = infra.find((entry) => entry.id === notificationFocus.location_id);
+    if (node?.lat == null || node?.lon == null) return;
+    lastNotificationFocus.current = notificationFocus.focusKey;
+    carte.current.flyTo([node.lat, node.lon], Math.max(carte.current.getZoom(), 15), { duration: 0.8 });
+  }, [infra, notificationFocus]);
 
   useEffect(() => {
     if (!vaguesCascades?.length) return;
@@ -457,6 +472,18 @@ export default function MapView({
   return (
     <>
       <div id="carte" />
+      {notificationFocus && (
+        <div className="map-notification-focus" role="region" aria-label="Explication de la notification sur la carte">
+          <button className="map-notification-close" onClick={onCloseNotification}
+            aria-label="Fermer l'explication">×</button>
+          <small>{notificationFocus.category === "INCIDENT" ? "INCIDENT ENREGISTRÉ" :
+            notificationFocus.category === "CALL" ? "APPEL REÇU" : "MISSION SIMULÉE"} · {NIVEAU(notificationFocus.severity)}</small>
+          <strong>{notificationFocus.title} · {notificationFocus.location_id}</strong>
+          <p>{notificationFocus.detail}</p>
+          <span>Source : {notificationFocus.producer} · {new Date(notificationFocus.created_at).toLocaleString("fr-FR")}</span>
+          <span>Cette alerte situe un fait enregistré, pas une projection d'impact.</span>
+        </div>
+      )}
       <div className="map-overlay-title">
          <small>{replay ? "ARCHIVE OBSERVÉE // PAS EN DIRECT" : "JUMEAU NUMÉRIQUE EN DIRECT"}</small>
         <b>Grand Tunis</b>

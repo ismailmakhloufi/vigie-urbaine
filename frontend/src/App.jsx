@@ -167,6 +167,7 @@ export default function App({ readonly = false, secured = false }) {
   const [notificationInbox, setNotificationInbox] = useState({ items: [], counts: {} });
   const [notificationError, setNotificationError] = useState(null);
   const [ackBusy, setAckBusy] = useState(null);
+  const [notificationFocus, setNotificationFocus] = useState(null);
   const [chat, setChat] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
@@ -411,6 +412,7 @@ export default function App({ readonly = false, secured = false }) {
   };
 
   const gererSelection = (node) => {
+    setNotificationFocus(null);
     setCible(node);
     const selection = riskById[node.id] || null;
     setRisqueSelectionne(selection);
@@ -444,6 +446,24 @@ export default function App({ readonly = false, secured = false }) {
     void el.offsetWidth; // relance l'animation
     el.classList.add("zapper");
     setTimeout(() => el.classList.remove("zapper"), 1600);
+  };
+
+  const ouvrirNotification = (item) => {
+    const node = infra.find((entry) => entry.id === item.location_id);
+    if (!node || node.lat == null || node.lon == null) {
+      setToast(`Lieu ${item.location_id} introuvable sur la carte actuelle.`);
+      return;
+    }
+    setCible(node);
+    const selection = riskById[node.id] || null;
+    setRisqueSelectionne(selection);
+    const eventId = item.category === "INCIDENT" && item.source_key?.startsWith("event:")
+      ? item.source_key.slice(6) : null;
+    choisirSource(eventId
+      ? selection?.sources?.find((source) => source.event_id === eventId)?.event_id
+      : selection?.sources?.[0]?.event_id);
+    setNotificationFocus({ ...item, focusKey: `${item.id}:${Date.now()}` });
+    document.getElementById("carte")?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
   const kpiVoirIncidents = () => {
@@ -826,6 +846,9 @@ export default function App({ readonly = false, secured = false }) {
                 <strong>{item.title} · {item.location_id}</strong>
                 <p>{item.detail}</p>
                 <small>{item.producer} · {new Date(item.created_at).toLocaleString("fr-FR")}</small>
+                <button onClick={() => ouvrirNotification(item)}>
+                  Voir le lieu sur la carte
+                </button>
                 {item.state === "NEW" && !readonly && (
                   <button disabled={ackBusy === item.id} onClick={() => accuserNotification(item.id)}>
                     {ackBusy === item.id ? "Enregistrement…" : "Prendre en compte"}
@@ -1053,6 +1076,8 @@ export default function App({ readonly = false, secured = false }) {
           itineraires={plan?.detours || []}
           missions={missionsActives}
           options={comparateur?.options || []}
+          notificationFocus={notificationFocus}
+          onCloseNotification={() => setNotificationFocus(null)}
         />
         {toast && <div className="toast">{toast}</div>}
       </main>

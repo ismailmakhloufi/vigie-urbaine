@@ -104,6 +104,21 @@ button { font: inherit; }
 }
 .notification-card button:disabled { opacity: .5; }
 .notification-error { color: var(--rouge); font-size: 10px; }
+.map-notification-focus {
+  position: absolute; z-index: 1000; left: 50%; bottom: 26px;
+  transform: translateX(-50%); width: min(420px, calc(100% - 32px));
+  display: grid; gap: 6px; padding: 14px 36px 14px 16px;
+  background: rgba(10, 18, 29, .97); border: 1px solid var(--ambre);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .55); color: var(--ink);
+}
+.map-notification-focus small { color: var(--ambre); font: 10px var(--font-mono); }
+.map-notification-focus strong { font-size: 14px; }
+.map-notification-focus p { font-size: 12px; line-height: 1.4; }
+.map-notification-focus span { color: var(--ink-dim); font-size: 10px; line-height: 1.4; }
+.map-notification-close {
+  position: absolute; right: 9px; top: 8px; border: 0; background: transparent;
+  color: var(--ink); cursor: pointer; font-size: 20px;
+}
 @media (max-width: 1000px) {
   .header { gap: 7px; }
   .replay-entry, .notification-entry { font-size: 9px; padding: 5px; }
