@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import { NATURES_FR, PROFILS_FR, NIVEAUX_FR, STATUTS_FR, NIVEAU } from "../libelles.js";
+import { escapeHtml as h } from "../escapeHtml.js";
 
 const COULEURS_STATUT = {
   ONLINE: "#34d399",
@@ -124,9 +125,9 @@ export default function MapView({
         .bindPopup(
           `<div class="map-popup">` +
             `<b>🧭 Itinéraire alternatif optimal</b><br>` +
-            `vers ${itineraire.dest_id} · ${itineraire.dest_name}<br>` +
-            `via ${itineraire.via_names?.join(" › ") || "…"} ` +
-            `(${itineraire.jumps} saut(s))` +
+            `vers ${h(itineraire.dest_id)} · ${h(itineraire.dest_name)}<br>` +
+            `via ${h(itineraire.via_names?.join(" › ") || "…")} ` +
+            `(${h(itineraire.jumps)} saut(s))` +
           `</div>`
         );
     }
@@ -148,8 +149,8 @@ export default function MapView({
         })
           .addTo(couche.current)
           .bindPopup(
-            `<b>${node.name}</b><br>Zone météo` +
-              (risk ? `<br><b>Risque ${NIVEAU(risk.risk)} : ${risk.score}/100</b>` : "")
+            `<b>${h(node.name)}</b><br>Zone météo` +
+              (risk ? `<br><b>Risque ${h(NIVEAU(risk.risk))} : ${h(risk.score)}/100</b>` : "")
           );
 
         zone.on("click", () => onSelection(node));
@@ -183,13 +184,13 @@ export default function MapView({
 
           const popupHtml =
             `<div class="map-popup">` +
-              `<b>🛣️ ${node.name}</b><br>` +
-              `<span>Route · ${node.id}</span><br>` +
-              `Statut : <b>${STATUTS_FR[node.status || "UNKNOWN"] || node.status || "Inconnu"}</b><br>` +
+              `<b>🛣️ ${h(node.name)}</b><br>` +
+              `<span>Route · ${h(node.id)}</span><br>` +
+              `Statut : <b>${h(STATUTS_FR[node.status || "UNKNOWN"] || node.status || "Inconnu")}</b><br>` +
               (risk
-                ? `Risque : <b style="color:${riskColor}">${NIVEAU(risk.risk)} · ${risk.score}/100</b><br>`
+                ? `Risque : <b style="color:${riskColor}">${h(NIVEAU(risk.risk))} · ${h(risk.score)}/100</b><br>`
                 : "Risque : FAIBLE / non exposé<br>") +
-              (node.criticality != null ? `Criticité : ${node.criticality}/5<br>` : "") +
+              (node.criticality != null ? `Criticité : ${h(node.criticality)}/5<br>` : "") +
             `</div>`;
 
           const route = L.polyline(pts, {
@@ -222,7 +223,7 @@ export default function MapView({
               html:
                 `<div class="${classesPin}" style="color:${couleur};width:16px;height:16px">` +
                   `<div class="coeur"></div>` +
-                  `<div class="etiquette">${node.id}</div>` +
+                  `<div class="etiquette">${h(node.id)}</div>` +
                 `</div>`,
             }),
           })
@@ -259,17 +260,17 @@ export default function MapView({
         .addTo(couche.current)
         .bindPopup(
           `<div class="map-popup">` +
-            `<b>${EMOJIS_NATURE[node.kind] || "📍"} ${node.name}</b><br>` +
-            `<span>${NATURES_FR[node.kind] || node.kind} · ${node.id}</span><br>` +
-            `Statut : <b>${STATUTS_FR[node.status || "UNKNOWN"] || node.status || "Inconnu"}</b><br>` +
+            `<b>${EMOJIS_NATURE[node.kind] || "📍"} ${h(node.name)}</b><br>` +
+            `<span>${h(NATURES_FR[node.kind] || node.kind)} · ${h(node.id)}</span><br>` +
+            `Statut : <b>${h(STATUTS_FR[node.status || "UNKNOWN"] || node.status || "Inconnu")}</b><br>` +
             (risk
-              ? `Risque : <b style="color:${riskColor}">${NIVEAU(risk.risk)} · ${risk.score}/100</b><br>`
+              ? `Risque : <b style="color:${riskColor}">${h(NIVEAU(risk.risk))} · ${h(risk.score)}/100</b><br>`
               : "Risque : FAIBLE / non exposé<br>") +
-            (node.criticality != null ? `Criticité : ${node.criticality}/5<br>` : "") +
+            (node.criticality != null ? `Criticité : ${h(node.criticality)}/5<br>` : "") +
             (node.backup_power_hours != null
-              ? `Secours : ${node.backup_power_hours} h<br>`
+              ? `Secours : ${h(node.backup_power_hours)} h<br>`
               : "") +
-            (node.stock_days != null ? `Stock : ${node.stock_days} j` : "") +
+            (node.stock_days != null ? `Stock : ${h(node.stock_days)} j` : "") +
           `</div>`
         );
 
@@ -288,7 +289,7 @@ export default function MapView({
         pin.innerHTML =
           `<div class="coeur"></div>` +
           `<div class="symbole">${EMOJIS_NATURE[node.kind] || "📍"}</div>` +
-          `<div class="etiquette">${node.id}</div>`;
+          `<div class="etiquette">${h(node.id)}</div>`;
 
         el.appendChild(pin);
         markers.current[node.id] = { marker, el, pin };
@@ -389,10 +390,10 @@ export default function MapView({
         .addTo(layer)
         .bindPopup(
           `<div class="map-popup">` +
-            `<b>${mission.corridor_active ? "🚨 " : ""}Mission ${mission.mission_id} · ${PROFILS_FR[mission.profile] || mission.profile}</b><br>` +
-            `${mission.vehicle ? `Véhicule <b>${mission.vehicle}</b> · ` : ""}` +
-            `${mission.origin_name} → ${mission.destination_name}<br>` +
-            `${(mission.progress * 100).toFixed(0)}% · arrivée dans ${mission.remaining_min} min` +
+            `<b>${mission.corridor_active ? "🚨 " : ""}Mission ${h(mission.mission_id)} · ${h(PROFILS_FR[mission.profile] || mission.profile)}</b><br>` +
+            `${mission.vehicle ? `Véhicule <b>${h(mission.vehicle)}</b> · ` : ""}` +
+            `${h(mission.origin_name)} → ${h(mission.destination_name)}<br>` +
+            `${h((Number(mission.progress || 0) * 100).toFixed(0))}% · arrivée dans ${h(mission.remaining_min)} min` +
           `</div>`
         );
 
@@ -446,8 +447,8 @@ export default function MapView({
         .bindPopup(
           `<div class="map-popup">` +
             `<b>${label}</b><br>` +
-            `${option.estimated_time_min} min · ${option.distance_km} km<br>` +
-            `${option.route_names?.join(" › ") || ""}` +
+            `${h(option.estimated_time_min)} min · ${h(option.distance_km)} km<br>` +
+            `${h(option.route_names?.join(" › ") || "")}` +
           `</div>`
         );
     }

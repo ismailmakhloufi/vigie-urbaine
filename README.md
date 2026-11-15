@@ -25,7 +25,7 @@ Ces archives ne reconstruisent **pas** la période antérieure à leur activatio
 
 ## Vérification
 
-Depuis `backend` : `python -m unittest discover -s tests -v`. Depuis `frontend` : `npm run build`. Les tests de sécurité vérifient notamment les accès anonymes, les rôles, l'origine des mutations et la clé d'agence.
+Depuis `backend` : `python -m unittest discover -s tests -v`. Depuis `frontend` : `npm test` puis `npm run build`. Les tests de sécurité vérifient notamment les accès anonymes, les rôles, l'origine des mutations, la clé d'agence et l'échappement des textes de la carte.
 
 ## Étapes vers un prototype de production complet
 
