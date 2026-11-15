@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import MapView from "./components/MapView.jsx";
 import ReplayView from "./components/ReplayView.jsx";
+import { recordIncoming } from "./notificationSound.js";
 import {
   NATURES_FR,
   PROFILS_FR,
@@ -181,8 +182,7 @@ export default function App({ readonly = false, secured = false }) {
   const [flux, setFlux] = useState(null);
   const [comparateur, setComparateur] = useState(null);
   const chatLog = useRef(null);
-  const appelsVus = useRef(new Set());
-  const premierBalayage = useRef(true);
+  const soundLedgerFallback = useRef(new Map());
 
   // double bip court (standard d'urgence) via WebAudio — aucun fichier
   const bipAppel = () => {
@@ -228,19 +228,6 @@ export default function App({ readonly = false, secured = false }) {
       setFlotte(flotteData);
       setAppels(appelsData);
       setFlux(fluxData);
-      // appel entrant : double bip + annonce
-      const nouveaux = appelsData.filter((a) => !appelsVus.current.has(a.call_id));
-      for (const a of appelsData) appelsVus.current.add(a.call_id);
-      if (!premierBalayage.current && nouveaux.length > 0) {
-        bipAppel();
-        const premier = nouveaux[0];
-        setToast(
-          nouveaux.length === 1
-            ? `📞 Nouvel appel ${premier.kind === "SUPPLY" ? "logistique" : "médical"} — ${premier.destination_id}`
-            : `📞 ${nouveaux.length} nouveaux appels`
-        );
-      }
-      premierBalayage.current = false;
       setErreur(null);
     } catch (exc) {
       setErreur(`Backend injoignable : ${exc.message}`);
@@ -270,9 +257,36 @@ export default function App({ readonly = false, secured = false }) {
 
   useEffect(() => {
     let active = true;
-    const charger = () => getNotifications(notificationFilter).then((result) => {
-      if (active) { setNotificationInbox(result); setNotificationError(null); }
-    }).catch((exc) => { if (active) setNotificationError(exc.message); });
+    const charger = async () => {
+      try {
+        const nouvelles = await getNotifications("NEW");
+        if (!active) return;
+        const storage = {
+          getItem: (key) => {
+            try { return window.localStorage.getItem(key) ?? soundLedgerFallback.current.get(key) ?? null; }
+            catch { return soundLedgerFallback.current.get(key) ?? null; }
+          },
+          setItem: (key, value) => {
+            soundLedgerFallback.current.set(key, value);
+            try { window.localStorage.setItem(key, value); } catch { /* stockage désactivé */ }
+          },
+        };
+        const signaler = () => {
+          if (!active) return;
+          const incoming = recordIncoming(storage, nouvelles.items);
+          if (incoming.length) {
+            bipAppel();
+            setToast(incoming.length === 1
+              ? `🔔 Nouvelle alerte : ${incoming[0].title} — ${incoming[0].location_id}`
+              : `🔔 ${incoming.length} nouvelles alertes`);
+          }
+        };
+        if (navigator.locks?.request) await navigator.locks.request("urban-butterfly-notification-sound", signaler);
+        else signaler();
+        const result = notificationFilter === "NEW" ? nouvelles : await getNotifications(notificationFilter);
+        if (active) { setNotificationInbox(result); setNotificationError(null); }
+      } catch (exc) { if (active) setNotificationError(exc.message); }
+    };
     charger();
     const timer = setInterval(charger, 6000);
     return () => { active = false; clearInterval(timer); };
@@ -848,7 +862,7 @@ export default function App({ readonly = false, secured = false }) {
 
         <section className="notification-panel" id="section-notifications">
           <div className="section-titre">Centre de notifications</div>
-          <p>Alertes conservées en base · actualisation toutes les 6 secondes.</p>
+          <p>Alertes conservées en base · actualisation toutes les 6 secondes. Les nouvelles urgences sont signalées une fois par navigateur ; le premier chargement reste silencieux.</p>
           <div className="notification-filters" role="group" aria-label="État des notifications">
             {[
               ["NEW", "À traiter"], ["ACKNOWLEDGED", "Pris en compte"], ["RESOLVED", "Résolus"],
