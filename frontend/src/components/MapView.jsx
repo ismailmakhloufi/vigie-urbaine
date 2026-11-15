@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import { NATURES_FR, PROFILS_FR, NIVEAUX_FR, STATUTS_FR, NIVEAU } from "../libelles.js";
 import { escapeHtml as h } from "../escapeHtml.js";
+import { buildEstimatedFootprint } from "../estimatedFootprint.js";
 
 const COULEURS_STATUT = {
   ONLINE: "#34d399",
@@ -60,6 +61,8 @@ export default function MapView({
   notificationFocus = null,
   notificationImpact = null,
   notificationImpactError = null,
+  whatifImpact = null,
+  liveRiskImpacts = [],
   onCloseNotification,
   replay = false,
 }) {
@@ -72,6 +75,16 @@ export default function MapView({
   const derniereChaine = useRef(null);
   const markers = useRef({});
   const lastNotificationFocus = useRef(null);
+  const liveEstimate = useMemo(() => liveRiskImpacts.length ? { impacts: liveRiskImpacts } : null,
+    [liveRiskImpacts]);
+  const visibleEstimate = notificationFocus ? notificationImpact : whatifImpact || liveEstimate;
+  const footprintColor = notificationFocus ? "#22d3ee" : whatifImpact ? "#a78bfa" : "#fbbf24";
+  const footprint = useMemo(() => buildEstimatedFootprint(infra, visibleEstimate?.impacts || []),
+    [infra, visibleEstimate]);
+  const voirEmprise = () => {
+    const points = footprint.groups.flatMap((group) => group.polygon);
+    if (points.length) carte.current?.fitBounds(points, { padding: [35, 35], maxZoom: 14 });
+  };
 
   useEffect(() => {
     if (carte.current) return;
@@ -355,9 +368,15 @@ export default function MapView({
     const layer = coucheEstimee.current;
     if (!layer) return;
     layer.clearLayers();
-    if (!notificationFocus || !notificationImpact) return;
+    if (!visibleEstimate) return;
+    for (const group of footprint.groups) {
+      L.polygon(group.polygon, {
+        color: footprintColor, weight: 2, dashArray: "8 6", fillColor: footprintColor,
+        fillOpacity: 0.08, interactive: false,
+      }).addTo(layer);
+    }
     const positions = new Map(infra.map((node) => [node.id, node]));
-    for (const impact of notificationImpact.impacts) {
+    for (const impact of visibleEstimate.impacts) {
       const node = positions.get(impact.id);
       if (node?.lat == null || node?.lon == null) continue;
       L.circleMarker([node.lat, node.lon], {
@@ -369,7 +388,7 @@ export default function MapView({
         `Projection du modèle, pas un dommage constaté.</div>`
       );
     }
-  }, [infra, notificationFocus, notificationImpact]);
+  }, [infra, visibleEstimate, footprint, footprintColor]);
 
   useEffect(() => {
     if (!vaguesCascades?.length) return;
@@ -512,13 +531,23 @@ export default function MapView({
                 <>
                   <span>{notificationImpact.total_count} site(s) potentiellement touché(s) · calcul sur l'état actuel</span>
                   <span>{notificationImpact.impacts.slice(0, 4).map((impact) => impact.name).join(" · ") || "Aucun site exposé selon le modèle."}</span>
-                  <span>Les cercles en pointillés indiquent les sites potentiellement concernés.</span>
+                  <span>{footprint.groups.length} emprise(s) indicatives · incertitude qualitative {footprint.uncertainty.toLowerCase()} ({footprint.reason}).</span>
+                  <span>Contours en pointillés : enveloppes de lecture autour des sites, pas des zones entièrement sinistrées.</span>
+                  {footprint.groups.length > 0 && <button className="map-fit-estimate" onClick={voirEmprise}>Voir toutes les emprises estimées</button>}
                 </>
               ) : <span>{notificationImpactError || "Calcul de l'impact potentiel…"}</span>}
             </div>
           )}
           {notificationFocus.category !== "INCIDENT" && <span>Aucun impact potentiel calculé pour cette alerte.</span>}
           {notificationFocus.state === "RESOLVED" && <span>Incident clos : aucune projection actuelle affichée.</span>}
+        </div>
+      )}
+      {!notificationFocus && visibleEstimate && (
+        <div className="map-estimate-overview" role="region" aria-label="Emprise estimée du modèle" style={{ borderColor: footprintColor }}>
+          <b style={{ color: footprintColor }}>{whatifImpact ? "🔮 SCÉNARIO HYPOTHÉTIQUE" : "◌ RISQUES CALCULÉS · ÉTAT ACTUEL"}</b>
+          <span>{footprint.groups.length} emprise(s) indicatives autour de {footprint.mappedCount} site(s) · incertitude {footprint.uncertainty.toLowerCase()}.</span>
+          <small>{footprint.reason}. {whatifImpact ? "Aucune crise modifiée ; les contours" : "Les contours"} ne prédisent pas une zone de dégâts.</small>
+          {footprint.groups.length > 0 && <button onClick={voirEmprise} style={{ borderColor: footprintColor, color: footprintColor }}>Voir les emprises estimées</button>}
         </div>
       )}
       <div className="map-overlay-title">
@@ -539,6 +568,7 @@ export default function MapView({
         <span><i className="puce status-cyber-dot" /> Compromis</span>
         <span><i className="puce whatif-dot" /> Simulation</span>
         {chaineRisque.length > 1 && <span><i className="puce chaine-dot" /> Dépendance estimée</span>}
+        {visibleEstimate && <span><i className="puce footprint-dot" style={{ backgroundColor: footprintColor, borderColor: footprintColor }} /> Emprise indicative (modèle)</span>}
       </div>
     </>
   );

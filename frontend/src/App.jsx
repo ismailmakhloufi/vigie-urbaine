@@ -346,7 +346,7 @@ export default function App({ readonly = false, secured = false }) {
     const t = setTimeout(() => {
       setFantomes([]);
       setPrediction(null);
-    }, 15000);
+    }, 60000);
     return () => clearTimeout(t);
   }, [fantomes, prediction]);
 
@@ -996,6 +996,7 @@ export default function App({ readonly = false, secured = false }) {
         {prediction && (
           <section className="whatif-card">
             <div className="section-titre">Projection (simulation)</div>
+            <button className="whatif-clear" onClick={() => { setPrediction(null); setFantomes([]); }}>Effacer la projection</button>
             <div className="whatif-summary">
               <div><strong>{prediction.total_count}</strong><span>impacts</span></div>
               <div><strong>{prediction.max_depth}</strong><span>profondeur</span></div>
@@ -1176,6 +1177,8 @@ export default function App({ readonly = false, secured = false }) {
           notificationFocus={notificationFocus}
           notificationImpact={notificationImpact}
           notificationImpactError={notificationImpactError}
+          whatifImpact={prediction}
+          liveRiskImpacts={nodesAtRisk}
           onCloseNotification={fermerNotification}
         />
         {toast && <div className="toast">{toast}</div>}
