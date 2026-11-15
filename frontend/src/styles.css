@@ -119,6 +119,11 @@ button { font: inherit; }
   position: absolute; right: 9px; top: 8px; border: 0; background: transparent;
   color: var(--ink); cursor: pointer; font-size: 20px;
 }
+.map-estimated-impact {
+  display: grid; gap: 4px; margin-top: 4px; padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+.map-estimated-impact b { color: var(--cyan); font: 10px var(--font-mono); }
 @media (max-width: 1000px) {
   .header { gap: 7px; }
   .replay-entry, .notification-entry { font-size: 9px; padding: 5px; }

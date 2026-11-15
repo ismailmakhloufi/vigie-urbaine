@@ -27,7 +27,7 @@ Ces archives ne reconstruisent **pas** la période antérieure à leur activatio
 
 Les incidents, appels et arrivées/blocages de mission créent des alertes conservées dans MongoDB (`notifications`). Chaque alerte affiche le lieu, l'heure, la source, la gravité et l'état **à traiter / pris en compte / résolu**. La prise en compte par un opérateur ne résout pas l'incident : elle enregistre uniquement qui a vu l'alerte. Les incidents résolus passent automatiquement à « résolu ». Les événements encore actifs et les appels en attente sont retrouvés au démarrage ; l'historique clos n'est pas transformé en nouvelles alertes. La console actualise la boîte toutes les six secondes. En mode sécurisé, l'observateur peut lire mais pas acquitter.
 
-Le bouton « Voir le lieu sur la carte » sélectionne le site, centre la carte et affiche l'origine et l'explication de l'alerte, sans l'acquitter ni modifier l'incident. Les notifications ne contiennent **aucune projection de propagation**. L'étiquetage « observé / estimé » détaillé et la reprise des signaux sonores seront traités séparément.
+Le bouton « Voir le lieu sur la carte » sélectionne le site, centre la carte et affiche l'origine et l'explication de l'alerte, sans l'acquitter ni modifier l'incident. Pour un incident ouvert, l'impact potentiel est calculé en lecture seule sur l'état actuel : les sites estimés apparaissent en pointillés, distincts du fait enregistré. Un incident clos ne reçoit pas de nouvelle estimation courante. Cette estimation n'est ni un dommage constaté ni une mutation de la crise. La reprise des signaux sonores sera traitée séparément.
 
 ## Vérification
 

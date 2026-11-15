@@ -168,6 +168,9 @@ export default function App({ readonly = false, secured = false }) {
   const [notificationError, setNotificationError] = useState(null);
   const [ackBusy, setAckBusy] = useState(null);
   const [notificationFocus, setNotificationFocus] = useState(null);
+  const notificationAnalysisRequest = useRef(0);
+  const [notificationImpact, setNotificationImpact] = useState(null);
+  const [notificationImpactError, setNotificationImpactError] = useState(null);
   const [chat, setChat] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
@@ -412,6 +415,9 @@ export default function App({ readonly = false, secured = false }) {
   };
 
   const gererSelection = (node) => {
+    notificationAnalysisRequest.current += 1;
+    setNotificationImpact(null);
+    setNotificationImpactError(null);
     setNotificationFocus(null);
     setCible(node);
     const selection = riskById[node.id] || null;
@@ -422,6 +428,7 @@ export default function App({ readonly = false, secured = false }) {
   };
 
   const ouvrirRisque = (node) => {
+    fermerNotification();
     const infrastructure = infra.find((item) => item.id === node.id);
     if (infrastructure) setCible(infrastructure);
     setRisqueSelectionne(node);
@@ -430,6 +437,7 @@ export default function App({ readonly = false, secured = false }) {
 
   // Les cartes indicatrices mènent directement à l'essentiel
   const ciblerIncident = (incident) => {
+    fermerNotification();
     const infraNode = infra.find((item) => item.id === incident.target_id);
     if (infraNode) setCible(infraNode);
     const selection = riskById[incident.target_id] || null;
@@ -454,6 +462,9 @@ export default function App({ readonly = false, secured = false }) {
       setToast(`Lieu ${item.location_id} introuvable sur la carte actuelle.`);
       return;
     }
+    const demande = ++notificationAnalysisRequest.current;
+    setNotificationImpact(null);
+    setNotificationImpactError(null);
     setCible(node);
     const selection = riskById[node.id] || null;
     setRisqueSelectionne(selection);
@@ -464,6 +475,22 @@ export default function App({ readonly = false, secured = false }) {
       : selection?.sources?.[0]?.event_id);
     setNotificationFocus({ ...item, focusKey: `${item.id}:${Date.now()}` });
     document.getElementById("carte")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (eventId && item.state !== "RESOLVED") {
+      getEventImpact(eventId).then((impact) => {
+        if (demande === notificationAnalysisRequest.current) setNotificationImpact(impact);
+      }).catch(() => {
+        if (demande === notificationAnalysisRequest.current) {
+          setNotificationImpactError("Estimation temporairement indisponible.");
+        }
+      });
+    }
+  };
+
+  const fermerNotification = () => {
+    notificationAnalysisRequest.current += 1;
+    setNotificationFocus(null);
+    setNotificationImpact(null);
+    setNotificationImpactError(null);
   };
 
   const kpiVoirIncidents = () => {
@@ -946,7 +973,7 @@ export default function App({ readonly = false, secured = false }) {
                 </div>
                 <strong>{incident.target_id}</strong>
                 <small>
-                  {incident.total_count} impact(s) · profondeur {incident.max_depth}
+                  {incident.total_count} site(s) potentiellement touché(s) · profondeur estimée {incident.max_depth}
                 </small>
                 {!readonly && <button onClick={(e) => { e.stopPropagation(); resoudre(incident.event_id); }}>Résoudre</button>}
               </article>
@@ -1077,7 +1104,9 @@ export default function App({ readonly = false, secured = false }) {
           missions={missionsActives}
           options={comparateur?.options || []}
           notificationFocus={notificationFocus}
-          onCloseNotification={() => setNotificationFocus(null)}
+          notificationImpact={notificationImpact}
+          notificationImpactError={notificationImpactError}
+          onCloseNotification={fermerNotification}
         />
         {toast && <div className="toast">{toast}</div>}
       </main>

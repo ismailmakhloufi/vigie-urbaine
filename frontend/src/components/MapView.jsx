@@ -58,6 +58,8 @@ export default function MapView({
   missions = [],
   options = [],
   notificationFocus = null,
+  notificationImpact = null,
+  notificationImpactError = null,
   onCloseNotification,
   replay = false,
 }) {
@@ -66,6 +68,7 @@ export default function MapView({
   const coucheMissions = useRef(null);
   const coucheVariantes = useRef(null);
   const coucheChaine = useRef(null);
+  const coucheEstimee = useRef(null);
   const derniereChaine = useRef(null);
   const markers = useRef({});
   const lastNotificationFocus = useRef(null);
@@ -88,6 +91,7 @@ export default function MapView({
     coucheMissions.current = L.layerGroup().addTo(carte.current);
     coucheVariantes.current = L.layerGroup().addTo(carte.current);
     coucheChaine.current = L.layerGroup().addTo(carte.current);
+    coucheEstimee.current = L.layerGroup().addTo(carte.current);
 
     const resize = () => carte.current?.invalidateSize();
     setTimeout(resize, 150);
@@ -348,6 +352,26 @@ export default function MapView({
   }, [infra, notificationFocus]);
 
   useEffect(() => {
+    const layer = coucheEstimee.current;
+    if (!layer) return;
+    layer.clearLayers();
+    if (!notificationFocus || !notificationImpact) return;
+    const positions = new Map(infra.map((node) => [node.id, node]));
+    for (const impact of notificationImpact.impacts) {
+      const node = positions.get(impact.id);
+      if (node?.lat == null || node?.lon == null) continue;
+      L.circleMarker([node.lat, node.lon], {
+        radius: 25, color: RISK_COLORS[impact.risk] || RISK_COLORS.LOW,
+        weight: 2, dashArray: "5 5", fillOpacity: 0.04,
+      }).addTo(layer).bindPopup(
+        `<div class="map-popup"><b>Impact estimé · ${h(node.name)}</b><br>` +
+        `Risque calculé : ${h(NIVEAU(impact.risk))} · ${h(impact.score)}/100<br>` +
+        `Projection du modèle, pas un dommage constaté.</div>`
+      );
+    }
+  }, [infra, notificationFocus, notificationImpact]);
+
+  useEffect(() => {
     if (!vaguesCascades?.length) return;
 
     const timers = [];
@@ -481,7 +505,20 @@ export default function MapView({
           <strong>{notificationFocus.title} · {notificationFocus.location_id}</strong>
           <p>{notificationFocus.detail}</p>
           <span>Source : {notificationFocus.producer} · {new Date(notificationFocus.created_at).toLocaleString("fr-FR")}</span>
-          <span>Cette alerte situe un fait enregistré, pas une projection d'impact.</span>
+          {notificationFocus.category === "INCIDENT" && notificationFocus.state !== "RESOLVED" && (
+            <div className="map-estimated-impact">
+              <b>ESTIMATION DU MODÈLE · pas de dommage constaté</b>
+              {notificationImpact ? (
+                <>
+                  <span>{notificationImpact.total_count} site(s) potentiellement touché(s) · calcul sur l'état actuel</span>
+                  <span>{notificationImpact.impacts.slice(0, 4).map((impact) => impact.name).join(" · ") || "Aucun site exposé selon le modèle."}</span>
+                  <span>Les cercles en pointillés indiquent les sites potentiellement concernés.</span>
+                </>
+              ) : <span>{notificationImpactError || "Calcul de l'impact potentiel…"}</span>}
+            </div>
+          )}
+          {notificationFocus.category !== "INCIDENT" && <span>Aucun impact potentiel calculé pour cette alerte.</span>}
+          {notificationFocus.state === "RESOLVED" && <span>Incident clos : aucune projection actuelle affichée.</span>}
         </div>
       )}
       <div className="map-overlay-title">

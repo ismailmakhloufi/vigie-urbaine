@@ -139,6 +139,13 @@ class OperationalJourneyTests(unittest.TestCase):
             self.assertEqual(self.db.notifications.find_one({"source_key": f"event:{event_id}"})["state"], "NEW")
             self.assertEqual(self.client.get("/risk").json()["active_incidents"], 1)
 
+            estimated = self.client.get(f"/events/{event_id}/impact")
+            self.assertEqual(estimated.status_code, 200, estimated.text)
+            self.assertEqual(estimated.json()["impacts"][0]["id"], "H1")
+            self.assertEqual(self.db.events.find_one({})["status"], "ACTIVE")
+            self.assertEqual(graph["status"], "BLOCKED")
+            self.assertEqual(self.db.notifications.count_documents({}), 1)
+
             predicted = self.client.get(f"/risk/intervention/{event_id}")
             self.assertEqual(predicted.status_code, 200, predicted.text)
             self.assertEqual(predicted.json()["nodes"][0]["after"], 0)
