@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import MapView from "./components/MapView.jsx";
+import ReplayView from "./components/ReplayView.jsx";
 import {
   NATURES_FR,
   PROFILS_FR,
@@ -159,6 +160,7 @@ export default function App({ readonly = false, secured = false }) {
   const [compareId, setCompareId] = useState(null);
   const [evolution, setEvolution] = useState([]);
   const [audit, setAudit] = useState([]);
+  const [replayOpen, setReplayOpen] = useState(false);
   const [chat, setChat] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
@@ -595,6 +597,11 @@ export default function App({ readonly = false, secured = false }) {
     }
   };
 
+  if (replayOpen) return <ReplayView infrastructure={infra} onClose={() => {
+    setReplayOpen(false);
+    refresh();
+  }} />;
+
   return (
     <div className="app app-v2">
       <header className="header">
@@ -603,6 +610,9 @@ export default function App({ readonly = false, secured = false }) {
           <h1>Urban <span>Butterfly</span></h1>
           <p>Centre d'analyse des risques urbains en cascade</p>
         </div>
+        <button className="replay-entry" onClick={() => setReplayOpen(true)}>
+          ◷ Relecture de crise
+        </button>
 
         <div className={`city-status status-${cityStatus.toLowerCase()}`}>
           <small>ÉTAT DE LA VILLE</small>

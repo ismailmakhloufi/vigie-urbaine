@@ -16,8 +16,10 @@ from app.routes.whatif import router as whatif_router
 from app.routes.missions import router as missions_router
 from app.routes.dispatch import router as dispatch_router
 from app.routes.ai import router as ai_router
+from app.routes.replay import router as replay_router
 from app.services import sources
 from app.services import dispatcher as dispatcher_service
+from app.services import replay
 from app.services.security import (router as auth_router, validate_config,
                                    current_actor, allowed_origins)
 from app.core.config import get_settings
@@ -48,7 +50,9 @@ async def lifespan(app: FastAPI):
     sources.start_stream()
     # file d'attente des appels sans vehicule : rappel automatique
     dispatcher_service.start_queue()
+    replay.start_recorder()
     yield
+    replay.stop_recorder()
     sources.stop_stream()
     neo4j_client.close()
     mongo_client.close()
@@ -115,6 +119,7 @@ app.include_router(dispatch_router)
 app.include_router(infra_router)
 app.include_router(ai_router)
 app.include_router(auth_router)
+app.include_router(replay_router)
 
 
 @app.get("/", tags=["Monitoring"])

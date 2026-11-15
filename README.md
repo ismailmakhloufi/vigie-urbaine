@@ -17,13 +17,19 @@ Prérequis : Docker, Python et Node.js. Copier `.env.example` vers `backend/.env
 
 Les sessions expirent au bout de huit heures et sont invalidées à la déconnexion. Les actions HTTP en mode sécurisé sont enregistrées dans `audit_log` (acteur, chemin, date, code de réponse ; aucun corps ni mot de passe). Les journaux restent à sauvegarder et à protéger. Les tentatives de connexion sont temporairement limitées. L'API `/health` est publique et ne révèle que l'état des services.
 
+## Relecture de crise
+
+Un instantané de la situation est conservé toutes les **30 secondes** dans `crisis_snapshots` (rétention **24 heures**). Le bouton « Relecture de crise » ouvre une vue indépendante en lecture seule : risques, statuts des infrastructures et de la flotte, incidents et missions observés. L'API `GET /replay` liste les captures (pagination `before` possible), `GET /replay/{id}` renvoie un instantané.
+
+Ces archives ne reconstruisent **pas** la période antérieure à leur activation ; les scores passés ne sont jamais recalculés avec le graphe actuel. MongoDB et Neo4j sont lus successivement dans une courte fenêtre, pas dans une transaction commune. La carte utilise la géométrie de référence actuelle, mais les statuts et scores enregistrés. L'archive n'exécute aucune action sur la crise vivante.
+
 ## Vérification
 
 Depuis `backend` : `python -m unittest discover -s tests -v`. Depuis `frontend` : `npm run build`. Les tests de sécurité vérifient notamment les accès anonymes, les rôles, l'origine des mutations et la clé d'agence.
 
 ## Étapes vers un prototype de production complet
 
-- Scénarios de crise **reproductibles** et relecture temporelle séparée de l'état courant ; jamais de projection qui modifie la ville.
+- Scénarios de crise **reproductibles** avec paramètres et amorce aléatoire contrôlés ; la relecture temporelle observée est livrée, mais n'est pas un moteur de rejeu déterministe des événements.
 - Parcours complets automatisés, tests de charge, pannes de MongoDB/Neo4j et mesures de latence avec objectifs chiffrés.
 - Validation métier des dépendances et des scores de risques ; justification et incertitude explicites dans chaque recommandation.
 - Sauvegarde/restauration vérifiées, migrations, rétention des journaux, supervision et déploiement HTTPS reproductible.

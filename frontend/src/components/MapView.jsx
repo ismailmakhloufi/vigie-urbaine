@@ -48,14 +48,15 @@ export default function MapView({
   infra,
   cibleId,
   onSelection,
-  vaguesCascades,
-  fantomes,
+  vaguesCascades = [],
+  fantomes = [],
   riskById = {},
   chaineRisque = [],
   sourceRisqueId,
   itineraires = [],
   missions = [],
   options = [],
+  replay = false,
 }) {
   const carte = useRef(null);
   const couche = useRef(null);
@@ -88,7 +89,11 @@ export default function MapView({
     setTimeout(resize, 150);
     window.addEventListener("resize", resize);
 
-    return () => window.removeEventListener("resize", resize);
+    return () => {
+      window.removeEventListener("resize", resize);
+      carte.current?.remove();
+      carte.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -452,7 +457,7 @@ export default function MapView({
     <>
       <div id="carte" />
       <div className="map-overlay-title">
-        <small>JUMEAU NUMÉRIQUE EN DIRECT</small>
+         <small>{replay ? "ARCHIVE OBSERVÉE // PAS EN DIRECT" : "JUMEAU NUMÉRIQUE EN DIRECT"}</small>
         <b>Grand Tunis</b>
       </div>
 
