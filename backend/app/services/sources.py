@@ -159,6 +159,11 @@ def _weather_tick():
     for sensor in SENSORS:
         try:
             current = fetch_weather(sensor["lat"], sensor["lon"])
+            if not isinstance(current, dict) or not any(
+                current.get(field) is not None for field in
+                ("temperature_2m", "precipitation", "wind_speed_10m", "relative_humidity_2m")
+            ):
+                raise ValueError("mesure météo absente")
         except Exception as exc:
             print(f"[sources] capteur {sensor['sensor_id']} : echec meteo ({exc})")
             continue

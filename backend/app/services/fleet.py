@@ -99,6 +99,10 @@ def integrate_fleet_update(payload: dict) -> dict:
     if not fields:
         raise ValueError("aucun champ à fusionner")
 
+    # Réception d'agence seulement : les mouvements calculés et le seed ne
+    # doivent jamais faire croire qu'un partenaire a transmis une donnée.
+    fields["agency_received_at"] = _now()
+
     # Un retour d'agence ne doit pas effacer une reservation de dispatch.
     if fields.get("status") == "AVAILABLE":
         result = mongo_client._db.vehicles.update_one(
@@ -106,7 +110,13 @@ def integrate_fleet_update(payload: dict) -> dict:
             {"$set": fields}, upsert=False,
         )
         if not result.matched_count:
-            mongo_client.insert_vehicle({"callsign": callsign, **fields})
+            # Même si AVAILABLE est ignoré pendant une réservation, la donnée
+            # externe a bien été reçue : ne dater que cette réception.
+            existing = mongo_client._db.vehicles.update_one(
+                {"callsign": callsign}, {"$set": {"agency_received_at": fields["agency_received_at"]}},
+            )
+            if not existing.matched_count:
+                mongo_client.insert_vehicle({"callsign": callsign, **fields})
     else:
         mongo_client.upsert_vehicle(callsign, fields)
     return {"callsign": callsign, **fields}

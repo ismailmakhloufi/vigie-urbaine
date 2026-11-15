@@ -78,6 +78,7 @@ export const getCalls = (limit = 8) =>
   apiFetch(`/integration/calls?limit=${limit}`);
 
 export const getStream = () => apiFetch("/integration/stream");
+export const getSourceHealth = () => apiFetch("/integration/sources");
 
 export const postStreamAction = (action) =>
   apiFetch("/integration/stream", {

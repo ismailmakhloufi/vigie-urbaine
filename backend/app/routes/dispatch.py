@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from app.services import dispatcher, fleet, missions
 from app.services import sources
+from app.services import source_health
 from app.services.routing import compute_route_options
 
 
@@ -101,6 +102,11 @@ def calls(limit: int = 12):
 @router.get("/integration/stream")
 def stream_state():
     return sources.stream_status()
+
+
+@router.get("/integration/sources")
+def sources_state():
+    return source_health.overview()
 
 
 @router.post("/integration/stream")

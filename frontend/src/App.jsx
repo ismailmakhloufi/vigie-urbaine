@@ -31,6 +31,7 @@ import {
   getFleet,
   getCalls,
   getStream,
+  getSourceHealth,
   postRouteOptions,
   postCorridor,
   postRadio,
@@ -107,6 +108,15 @@ const EMOJI_VEHICULE = {
   SUPPLY: "🚚",
 };
 
+const SOURCE_STATES = {
+  RECENT: "Donnée récente",
+  QUIET: "Silence prolongé",
+  NO_DATA: "Aucune réception",
+  LATE: "Mesure en retard",
+  PAUSED: "Flux en pause",
+  STREAM_OFFLINE: "Générateur arrêté",
+};
+
 function RiskBadge({ risk }) {
   return (
     <span className={`risk-badge risk-${(risk || "LOW").toLowerCase()}`}>
@@ -180,6 +190,8 @@ export default function App({ readonly = false, secured = false }) {
   const [flotte, setFlotte] = useState([]);
   const [appels, setAppels] = useState([]);
   const [flux, setFlux] = useState(null);
+  const [sourceHealth, setSourceHealth] = useState(null);
+  const [sourceHealthError, setSourceHealthError] = useState(null);
   const [comparateur, setComparateur] = useState(null);
   const chatLog = useRef(null);
   const soundLedgerFallback = useRef(new Map());
@@ -238,6 +250,16 @@ export default function App({ readonly = false, secured = false }) {
     refresh();
     const timer = setInterval(refresh, 4000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const charger = () => getSourceHealth().then((result) => {
+      if (active) { setSourceHealth(result); setSourceHealthError(null); }
+    }).catch(() => { if (active) setSourceHealthError("État des sources indisponible"); });
+    charger();
+    const timer = setInterval(charger, 15000);
+    return () => { active = false; clearInterval(timer); };
   }, []);
 
   useEffect(() => {
@@ -810,6 +832,24 @@ export default function App({ readonly = false, secured = false }) {
               </small>
             </div>
           </div>
+
+          <details className="source-health" open>
+            <summary>Fraîcheur des sources · {sourceHealth?.channels.length ?? "…"} canaux</summary>
+            <small>Dernière donnée reçue, pas preuve de disponibilité. Le silence d'une agence ne signifie pas une panne.</small>
+            {sourceHealthError && <div role="alert" className="notification-error">{sourceHealthError}</div>}
+            {sourceHealth?.channels.map((channel) => (
+              <div className={`source-row source-${channel.status.toLowerCase()}`} key={channel.id}>
+                <div><b>{channel.label}</b><small>{channel.origin}</small></div>
+                <div><strong>{SOURCE_STATES[channel.status] || channel.status}</strong>
+                  <time dateTime={channel.last_received_at || undefined}>
+                    {channel.last_received_at
+                      ? `Reçu le ${new Date(channel.last_received_at).toLocaleString("fr-FR")}`
+                      : "Jamais reçu"}
+                  </time>
+                </div>
+              </div>
+            ))}
+          </details>
 
           <div className="flotte-liste">
             {flotte.length === 0 && (

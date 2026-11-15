@@ -22,6 +22,7 @@ from app.services import sources
 from app.services import dispatcher as dispatcher_service
 from app.services import replay
 from app.services import notifications
+from app.services import source_health
 from app.services.security import (router as auth_router, validate_config,
                                    current_actor, allowed_origins)
 from app.core.config import get_settings
@@ -49,6 +50,7 @@ async def lifespan(app: FastAPI):
         mongo_client._db.sessions.create_index("expires_at", expireAfterSeconds=0)
         mongo_client._db.login_attempts.create_index("until", expireAfterSeconds=0)
     notifications.ensure_indexes()
+    source_health.ensure_indexes()
     notifications.reconcile_current()
     # le monde s'agite des qu'on demarre : flux agences en ligne
     sources.start_stream()
