@@ -34,6 +34,10 @@ Les signaux des nouvelles urgences sont dédupliqués par identifiant de notific
 
 La console affiche, pour les appels CACU, la voirie, SIEM, SCADA, les quatre zones Open-Meteo et les mises à jour de flotte d'agence, la dernière **donnée reçue**. `GET /integration/sources` lit ces horodatages depuis MongoDB sans écrire d'incident. La météo, interrogée périodiquement, est marquée « mesure en retard » au-delà de quatre minutes ; une réponse météo vide n'est pas une mesure. Les autres flux événementiels peuvent rester silencieux sans être en panne : au-delà de trente minutes, « silence prolongé » ne conclut pas à une défaillance. Une pause du simulateur et un générateur arrêté sont signalés séparément ; une mise à jour de flotte calculée localement ne se fait pas passer pour une réception d'agence. Ce suivi n'est pas une supervision réseau de fournisseurs réels.
 
+## Priorité de lecture des notifications
+
+Les alertes « à traiter » sont classées dans la console par un score **calculé à l'affichage** : gravité enregistrée, ancienneté et hôpital ciblé ou potentiellement concerné selon le modèle de risque actuel. La mention P1/P2/P3 est une aide à la lecture, pas une gravité constatée ni une instruction d'intervention ; elle ne modifie ni MongoDB ni l'état d'un incident. Les alertes prises en compte ou résolues restent triées chronologiquement. La liste est bornée aux 500 dernières alertes de l'état choisi ; si elle est tronquée, la console le signale.
+
 ## Vérification
 
 Pour les tests, installer `backend/requirements-dev.txt`. Depuis `backend` : `python -m unittest discover -s tests -v`. Depuis `frontend` : `npm test` puis `npm run build`. Les parcours HTTP isolés utilisent Mongo en mémoire et un graphe routier contrôlé : ils vérifient appel → mission → arrivée → retour à base et incident → projection → résolution → historique sans modifier les bases de la simulation en cours. Les tests couvrent aussi les accès anonymes, les rôles, la clé d'agence et l'échappement des textes de la carte.

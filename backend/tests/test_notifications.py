@@ -86,6 +86,10 @@ class NotificationsTests(unittest.TestCase):
             self.assertEqual(self.client.get("/notifications").status_code, 200)
             self.assertEqual(self.client.post(f"/notifications/{item_id}/acknowledge").status_code, 403)
 
+    def test_liste_bornee_pour_le_classement_cote_console(self):
+        self.assertEqual(self.client.get("/notifications?state=NEW&limit=500").status_code, 200)
+        self.assertEqual(self.client.get("/notifications?state=NEW&limit=501").status_code, 422)
+
     def test_reprise_des_alertes_ouvertes_sans_rejouer_l_historique_clos(self):
         self.db.events.insert_many([
             {"type": "POWER_FAILURE", "severity": "CRITICAL", "target_id": "P1",

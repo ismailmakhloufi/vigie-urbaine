@@ -82,6 +82,13 @@ button { font: inherit; }
 .notification-entry:hover { background: rgba(255, 176, 32, .2); }
 .notification-panel { border-top: 1px solid var(--line); padding-top: 8px; }
 .notification-panel > p { color: var(--ink-dim); font-size: 10px; margin: 5px 0 10px; }
+.notification-panel .priority-method { color: var(--cyan); line-height: 1.4; }
+.priority-limit { display: block; margin: 8px 0; color: var(--ambre); font-size: 10px; }
+.notification-priority { display: grid; gap: 3px; border-top: 1px dashed var(--line); padding-top: 5px; }
+.notification-priority b { color: var(--cyan); font: 10px var(--font-mono); }
+.notification-priority small { color: var(--ink-dim); line-height: 1.4; }
+.notification-priority.priority-p1 b { color: var(--rouge); }
+.notification-priority.priority-p2 b { color: var(--ambre); }
 .notification-filters { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
 .notification-filters button {
   padding: 5px; font: 9px var(--font-mono); cursor: pointer;

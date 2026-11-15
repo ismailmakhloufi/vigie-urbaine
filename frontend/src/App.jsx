@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import MapView from "./components/MapView.jsx";
 import ReplayView from "./components/ReplayView.jsx";
 import { recordIncoming } from "./notificationSound.js";
+import { prioritizeNotifications } from "./notificationPriority.js";
 import {
   NATURES_FR,
   PROFILS_FR,
@@ -357,6 +358,11 @@ export default function App({ readonly = false, secured = false }) {
   const riskById = useMemo(
     () => Object.fromEntries(nodesAtRisk.map((node) => [node.id, node])),
     [nodesAtRisk]
+  );
+
+  const rankedNotifications = useMemo(
+    () => prioritizeNotifications(notificationInbox.items, infra, nodesAtRisk),
+    [notificationInbox.items, infra, nodesAtRisk]
   );
 
   const kpis = useMemo(() => {
@@ -903,6 +909,7 @@ export default function App({ readonly = false, secured = false }) {
         <section className="notification-panel" id="section-notifications">
           <div className="section-titre">Centre de notifications</div>
           <p>Alertes conservées en base · actualisation toutes les 6 secondes. Les nouvelles urgences sont signalées une fois par navigateur ; le premier chargement reste silencieux.</p>
+          <p className="priority-method">À traiter : ordre calculé selon gravité enregistrée, ancienneté et hôpitaux concernés (directement ou estimés par le modèle). P1/P2/P3 ne sont ni une nouvelle gravité constatée ni un ordre d'intervention.</p>
           <div className="notification-filters" role="group" aria-label="État des notifications">
             {[
               ["NEW", "À traiter"], ["ACKNOWLEDGED", "Pris en compte"], ["RESOLVED", "Résolus"],
@@ -917,13 +924,22 @@ export default function App({ readonly = false, secured = false }) {
           {notificationInbox.items.length === 0 && !notificationError && (
             <div className="empty-state">Aucune notification dans cette catégorie.</div>
           )}
+          {(notificationInbox.counts[notificationFilter] || 0) > notificationInbox.items.length && (
+            <small className="priority-limit">Classement limité aux {notificationInbox.items.length} notifications chargées ; {notificationInbox.counts[notificationFilter]} au total.</small>
+          )}
           <div className="notification-list">
-            {notificationInbox.items.map((item) => (
+            {rankedNotifications.map((item) => (
               <article className={`notification-card n-${item.severity.toLowerCase()}`} key={item.id}>
                 <div className="notification-heading">
                   <b>{item.category === "INCIDENT" ? "⚠ Incident" : item.category === "CALL" ? "☎ Appel" : "🚙 Mission"}</b>
                   <span>{NIVEAU(item.severity)}</span>
                 </div>
+                {item.priority && (
+                  <div className={`notification-priority priority-${item.priority.level.toLowerCase()}`}>
+                    <b>{item.priority.level} · Priorité calculée</b>
+                    <small>{item.priority.reasons.join(" · ")}</small>
+                  </div>
+                )}
                 <strong>{item.title} · {item.location_id}</strong>
                 <p>{item.detail}</p>
                 <small>{item.producer} · {new Date(item.created_at).toLocaleString("fr-FR")}</small>

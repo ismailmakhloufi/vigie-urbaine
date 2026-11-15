@@ -26,6 +26,7 @@ EVENT_TYPES = {
 def ensure_indexes():
     mongo_client._db.notifications.create_index("source_key", unique=True)
     mongo_client._db.notifications.create_index([("created_at", -1)])
+    mongo_client._db.notifications.create_index([("state", 1), ("created_at", -1)])
 
 
 def _publish(source_key: str, category: str, severity: str, location_id: str,
