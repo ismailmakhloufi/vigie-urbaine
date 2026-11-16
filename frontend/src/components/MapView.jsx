@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
-import { NATURES_FR, PROFILS_FR, NIVEAUX_FR, STATUTS_FR, NIVEAU } from "../libelles.js";
+import { NATURES_FR, PROFILS_FR, NIVEAUX_FR, STATUTS_FR, ETYPES_FR, NIVEAU } from "../libelles.js";
 import { escapeHtml as h } from "../escapeHtml.js";
 import { buildEstimatedFootprint } from "../estimatedFootprint.js";
 
@@ -40,6 +40,13 @@ const RISK_COLORS = {
   CRITICAL: "#f43f5e",
 };
 
+const WHATIF_LINK_EXPLANATIONS = {
+  POWER_FAILURE: "Le site dépend directement ou indirectement de l'alimentation du poste ciblé.",
+  CYBER_ATTACK: "Une dépendance technique relie le site à la cible de la cyberattaque simulée.",
+  ROAD_BLOCKED: "Le modèle relie le site à cette route par un accès ou une chaîne d'approvisionnement.",
+  HEAVY_RAIN: "Le modèle relie le site à cette zone météo, directement ou par le réseau routier.",
+};
+
 const toLatLngs = (flat) => {
   const out = [];
   for (let i = 0; i + 1 < flat.length; i += 2) out.push([flat[i], flat[i + 1]]);
@@ -63,6 +70,9 @@ export default function MapView({
   notificationImpact = null,
   notificationImpactError = null,
   whatifImpact = null,
+  selectedWhatifImpact = null,
+  onWhatifImpactSelection,
+  onCloseWhatifImpact,
   liveRiskImpacts = [],
   onCloseNotification,
   replay = false,
@@ -79,6 +89,13 @@ export default function MapView({
   const liveEstimate = useMemo(() => liveRiskImpacts.length ? { impacts: liveRiskImpacts } : null,
     [liveRiskImpacts]);
   const visibleEstimate = notificationFocus ? notificationImpact : whatifImpact || liveEstimate;
+  const whatifById = useMemo(() => new Map((whatifImpact?.impacts || []).map((impact) => [impact.id, impact])),
+    [whatifImpact]);
+  const selectNode = (node) => {
+    const impact = whatifById.get(node.id);
+    if (impact && onWhatifImpactSelection) onWhatifImpactSelection(impact);
+    else onSelection(node);
+  };
   const footprintColor = notificationFocus ? "#22d3ee" : whatifImpact ? "#a78bfa" : "#fbbf24";
   const footprint = useMemo(() => buildEstimatedFootprint(infra, visibleEstimate?.impacts || []),
     [infra, visibleEstimate]);
@@ -174,7 +191,7 @@ export default function MapView({
               (risk ? `<br><b>Risque ${h(NIVEAU(risk.risk))} : ${h(risk.score)}/100</b>` : "")
           );
 
-        zone.on("click", () => onSelection(node));
+        zone.on("click", () => selectNode(node));
         markers.current[node.id] = { marker: zone, el: zone.getElement(), pin: null };
         continue;
       }
@@ -224,7 +241,7 @@ export default function MapView({
           })
             .addTo(couche.current)
             .bindPopup(popupHtml);
-          route.on("click", () => onSelection(node));
+          route.on("click", () => selectNode(node));
 
           const pivot = [
             pts.reduce((s, p) => s + p[0], 0) / pts.length,
@@ -252,7 +269,7 @@ export default function MapView({
             .bindPopup(popupHtml);
 
           const badgeEl = badge.getElement();
-          badge.on("click", () => onSelection(node));
+          badge.on("click", () => selectNode(node));
           markers.current[node.id] = { marker: badge, el: badgeEl, pin: badgeEl };
           continue;
         }
@@ -316,10 +333,10 @@ export default function MapView({
         markers.current[node.id] = { marker, el, pin };
       }
 
-      marker.on("click", () => onSelection(node));
+      marker.on("click", () => selectNode(node));
     }
     if (searchFocus) markers.current[searchFocus.id]?.marker?.openPopup();
-  }, [infra, cibleId, fantomes, riskById, onSelection, itineraires, searchFocus]);
+  }, [infra, cibleId, fantomes, riskById, onSelection, itineraires, searchFocus, whatifById]);
 
   useEffect(() => {
     const layer = coucheChaine.current;
@@ -398,7 +415,7 @@ export default function MapView({
     for (const impact of visibleEstimate.impacts) {
       const node = positions.get(impact.id);
       if (node?.lat == null || node?.lon == null) continue;
-      L.circleMarker([node.lat, node.lon], {
+      const bubble = L.circleMarker([node.lat, node.lon], {
         radius: 25, color: RISK_COLORS[impact.risk] || RISK_COLORS.LOW,
         weight: 2, dashArray: "5 5", fillOpacity: 0.04,
       }).addTo(layer).bindPopup(
@@ -406,8 +423,9 @@ export default function MapView({
         `Risque calculé : ${h(NIVEAU(impact.risk))} · ${h(impact.score)}/100<br>` +
         `Projection du modèle, pas un dommage constaté.</div>`
       );
+      if (whatifImpact && onWhatifImpactSelection) bubble.on("click", () => onWhatifImpactSelection(impact));
     }
-  }, [infra, visibleEstimate, footprint, footprintColor]);
+  }, [infra, visibleEstimate, footprint, footprintColor, whatifImpact, onWhatifImpactSelection]);
 
   useEffect(() => {
     if (!vaguesCascades?.length) return;
@@ -534,6 +552,23 @@ export default function MapView({
   return (
     <>
       <div id="carte" />
+      {whatifImpact && selectedWhatifImpact && (
+        <div className="map-whatif-explanation" role="region" aria-label="Explication de l'impact hypothétique">
+          <button className="map-notification-close" onClick={onCloseWhatifImpact}
+            aria-label="Fermer l'explication de l'impact">×</button>
+          <small>SCÉNARIO HYPOTHÉTIQUE · AUCUN DOMMAGE CONSTATÉ</small>
+          <strong>{selectedWhatifImpact.name} · {selectedWhatifImpact.id}</strong>
+          <p>Si {ETYPES_FR[whatifImpact.event_type] || whatifImpact.event_type} sur {whatifImpact.target_id} se produisait (intensité {NIVEAU(whatifImpact.severity)}), ce site pourrait être concerné selon le graphe.</p>
+          <p>{WHATIF_LINK_EXPLANATIONS[whatifImpact.event_type] || "Un lien du graphe relie le site à la cible de l'incident simulé."}</p>
+          <b>Chaîne modélisée · {selectedWhatifImpact.depth} {selectedWhatifImpact.depth > 1 ? "liens" : "lien"}</b>
+          <div className="whatif-explanation-chain">{selectedWhatifImpact.chain?.map((step) => step.name || step.id).join(" → ") || "Chemin non disponible"}</div>
+          <b>Pourquoi ce niveau de risque estimé ? {NIVEAU(selectedWhatifImpact.risk)} · {selectedWhatifImpact.score}/100</b>
+          {selectedWhatifImpact.reasons?.length > 0 && <ul>
+            {selectedWhatifImpact.reasons.map((reason, index) => <li key={index}>{reason}</li>)}
+          </ul>}
+          <span>Projection du modèle, pas une panne, un blocage ou un dégât observé. Aucun état de la ville n'a été modifié.</span>
+        </div>
+      )}
       {notificationFocus && (
         <div className="map-notification-focus" role="region" aria-label="Explication de la notification sur la carte">
           <button className="map-notification-close" onClick={onCloseNotification}

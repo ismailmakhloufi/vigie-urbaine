@@ -165,6 +165,7 @@ export default function App({ readonly = false, secured = false }) {
   const [vagues, setVagues] = useState([]);
   const [fantomes, setFantomes] = useState([]);
   const [prediction, setPrediction] = useState(null);
+  const [selectedWhatifImpactId, setSelectedWhatifImpactId] = useState(null);
   const [toast, setToast] = useState(null);
   const [horloge, setHorloge] = useState("");
   const [erreur, setErreur] = useState(null);
@@ -454,6 +455,7 @@ export default function App({ readonly = false, secured = false }) {
   const risqueAffiche = risqueSelectionne ? riskById[risqueSelectionne.id] || null : null;
   const sourceActive = risqueAffiche?.sources?.find((source) => source.event_id === sourceEventId)
     || risqueAffiche?.sources?.[0];
+  const selectedWhatifImpact = prediction?.impacts.find((impact) => impact.id === selectedWhatifImpactId) || null;
   const classementObsolete = decisions && (
     decisions.scenarios.length !== (risque?.incident_list || []).length ||
     decisions.scenarios.some((s) => !(risque?.incident_list || []).some((i) => i.event_id === s.event_id))
@@ -518,6 +520,7 @@ export default function App({ readonly = false, secured = false }) {
   };
 
   const gererSelection = (node) => {
+    setSelectedWhatifImpactId(null);
     setSearchFocus(null);
     notificationAnalysisRequest.current += 1;
     setNotificationImpact(null);
@@ -663,6 +666,7 @@ export default function App({ readonly = false, secured = false }) {
       if (modeSimulation) {
         const predict = await postWhatif(contenu);
         setPrediction(predict);
+        setSelectedWhatifImpactId(null);
         setFantomes(predict.impacts.map((i) => i.id));
         setToast(`🔮 Simulation : ${predict.total_count} impact(s) prédit(s)`);
       } else {
@@ -676,6 +680,7 @@ export default function App({ readonly = false, secured = false }) {
         );
         setFantomes([]);
         setPrediction(null);
+        setSelectedWhatifImpactId(null);
         setToast(`Incident propagé : ${resultat.impact.total_count} impact(s)`);
         await refresh();
       }
@@ -1048,6 +1053,7 @@ export default function App({ readonly = false, secured = false }) {
               setModeSimulation((s) => !s);
               setFantomes([]);
               setPrediction(null);
+              setSelectedWhatifImpactId(null);
             }}
           >
             <span>
@@ -1061,7 +1067,7 @@ export default function App({ readonly = false, secured = false }) {
         {prediction && (
           <section className="whatif-card">
             <div className="section-titre">Projection (simulation)</div>
-            <button className="whatif-clear" onClick={() => { setPrediction(null); setFantomes([]); }}>Effacer la projection</button>
+            <button className="whatif-clear" onClick={() => { setPrediction(null); setFantomes([]); setSelectedWhatifImpactId(null); }}>Effacer la projection</button>
             <div className="whatif-summary">
               <div><strong>{prediction.total_count}</strong><span>impacts</span></div>
               <div><strong>{prediction.max_depth}</strong><span>profondeur</span></div>
@@ -1072,15 +1078,20 @@ export default function App({ readonly = false, secured = false }) {
                 <span>risque max</span>
               </div>
             </div>
-            <div className="prediction-list">
-              {prediction.impacts.slice(0, 6).map((impact) => (
-                <div className="prediction-row" key={impact.id}>
+            <div className="prediction-list" aria-label="Sites estimés touchés">
+              {prediction.impacts.map((impact) => (
+                <button type="button" className="prediction-row" key={impact.id}
+                  onClick={() => {
+                    setSelectedWhatifImpactId(impact.id);
+                    document.getElementById("carte")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }}>
                   <span>{EMOJI_KIND[impact.kind] || "📍"} {impact.name}</span>
                   <RiskBadge risk={impact.risk} />
                   <b>{impact.score}</b>
-                </div>
+                </button>
               ))}
             </div>
+            <small>Cliquez sur un site de la liste ou son cercle sur la carte pour expliquer l'impact estimé.</small>
           </section>
         )}
 
@@ -1233,6 +1244,9 @@ export default function App({ readonly = false, secured = false }) {
           cibleId={cible?.id}
           searchFocus={searchFocus}
           onSelection={gererSelection}
+          onWhatifImpactSelection={(impact) => setSelectedWhatifImpactId(impact.id)}
+          selectedWhatifImpact={selectedWhatifImpact}
+          onCloseWhatifImpact={() => setSelectedWhatifImpactId(null)}
           vaguesCascades={vagues}
           fantomes={fantomes}
           riskById={riskById}

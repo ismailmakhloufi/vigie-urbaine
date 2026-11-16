@@ -170,6 +170,21 @@ button:disabled { cursor: not-allowed; }
 .map-notification-focus strong { font-size: 14px; }
 .map-notification-focus p { font-size: 12px; line-height: 1.4; }
 .map-notification-focus span { color: var(--ink-dim); font-size: 10px; line-height: 1.4; }
+.map-whatif-explanation {
+  position: absolute; z-index: 1000; left: 12px; bottom: 12px;
+  width: min(370px, calc(100% - 24px)); max-height: min(70vh, 440px); overflow-y: auto;
+  display: grid; gap: 7px; padding: 14px 36px 14px 16px; box-sizing: border-box;
+  color: var(--ink); background: rgba(10, 18, 29, .97);
+  border: 1px solid var(--violet); box-shadow: 0 8px 32px rgba(0, 0, 0, .55);
+  font-size: 11px; line-height: 1.4;
+}
+.map-whatif-explanation small { color: var(--violet); font: 10px var(--font-mono); }
+.map-whatif-explanation strong { font-size: 14px; }
+.map-whatif-explanation b { color: var(--cyan); }
+.map-whatif-explanation p, .map-whatif-explanation ul { margin: 0; }
+.map-whatif-explanation ul { padding-left: 17px; }
+.map-whatif-explanation span { color: var(--ink-dim); }
+.whatif-explanation-chain { overflow-wrap: anywhere; color: var(--ambre); }
 .map-notification-close {
   position: absolute; right: 9px; top: 8px; border: 0; background: transparent;
   color: var(--ink); cursor: pointer; font-size: 20px;
@@ -455,6 +470,12 @@ button:disabled { cursor: not-allowed; }
   border-top: 1px solid var(--line);
 }
 .prediction-row > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.whatif-card .prediction-list { max-height: 230px; overflow-y: auto; }
+.whatif-card button.prediction-row {
+  width: 100%; color: var(--ink); background: transparent; text-align: left;
+  border: 0; border-top: 1px solid var(--line); cursor: pointer;
+}
+.whatif-card button.prediction-row:hover, .whatif-card button.prediction-row:focus-visible { background: rgba(167, 139, 250, .15); }
 
 /* ============ INCIDENTS ACTIFS ============ */
 .empty-state {

@@ -52,6 +52,8 @@ La recherche au-dessus de la carte propose dès la première lettre les infrastr
 
 ## Emprises estimées sur la carte
 
+Après une projection « What-if », cliquer sur le cercle d'un site estimé touché ou sur son nom dans la liste affiche l'incident hypothétique, la chaîne de liens retenue par le graphe et les raisons du score de risque. Cette explication reste une estimation : aucun incident ni dommage n'est enregistré par ce clic.
+
 En présence de risques calculés dans l'état courant, lorsqu'un incident ouvert est consulté ou qu'un scénario « What-if » est exécuté, la carte regroupe les sites impactés **selon le modèle** en ensembles proches et trace des enveloppes de visualisation en pointillés, avec une marge graphique de 200 mètres. Le scénario « What-if » remplace temporairement la vue agrégée des risques courants. Le bouton permet d'afficher toutes les emprises. Ces contours ne sont **ni** une prévision de propagation géophysique **ni** des zones entièrement touchées : seules les positions des sites calculés servent au dessin. L'incertitude affichée est qualitative et non calibrée (élevée si des sites manquent de coordonnées ou si la profondeur de dépendance atteint trois, modérée sinon). Le nombre de sites non géolocalisés est mentionné ; aucun statut ni incident n'est changé par cette représentation. Le scénario hypothétique reste affiché une minute ou jusqu'à son effacement manuel.
 
 ## Vérification
