@@ -123,19 +123,6 @@ button:disabled { cursor: not-allowed; }
 .notification-card button:hover:not(:disabled) { background: rgba(255, 176, 32, .13); }
 .notification-card button:disabled { opacity: .5; }
 .notification-error { color: var(--rouge); font-size: 10px; }
-.source-health { margin: 10px 0; border: 1px solid var(--line); background: var(--bg-panel-2); }
-.source-health summary { padding: 8px; cursor: pointer; color: var(--ambre); font: 10px var(--font-mono); }
-.source-health > small { display: block; padding: 0 8px 8px; color: var(--ink-dim); font-size: 10px; line-height: 1.4; }
-.source-row { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; border-top: 1px solid var(--line); font-size: 10px; }
-.source-row > div { display: grid; gap: 3px; min-width: 0; }
-.source-row > div:last-child { text-align: right; }
-.source-row b { color: var(--ink); }
-.source-row small, .source-row time { color: var(--ink-dim); font-size: 9px; }
-.source-row strong { color: var(--vert); font-size: 9px; }
-.source-quiet strong, .source-late strong { color: var(--ambre); }
-.source-no_data strong { color: var(--ink-dim); }
-.source-stream_offline strong { color: var(--rouge); }
-.source-paused strong { color: var(--cyan); }
 .simulation-control { display: grid; gap: 6px; margin: 10px 0 15px; }
 .simulation-control button {
   padding: 11px; font: 11px var(--font-mono); font-weight: 700; cursor: pointer;

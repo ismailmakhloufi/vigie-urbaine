@@ -71,7 +71,6 @@ export const getSimulationActivity = (before = null) => apiFetch(
   `/integration/activity?limit=60${before
     ? `&before_at=${encodeURIComponent(before.at)}&before_id=${encodeURIComponent(before.id)}` : ""}`
 );
-export const getSourceHealth = () => apiFetch("/integration/sources");
 
 export const postStreamAction = (action) =>
   apiFetch("/integration/stream", {
