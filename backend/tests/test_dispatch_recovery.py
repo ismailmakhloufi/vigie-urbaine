@@ -120,7 +120,8 @@ class DispatchRecoveryTests(unittest.TestCase):
         sources._restore_pending()
         migrate.assert_called_once_with(sources.RESOLVE_AFTER[1])
         self.assertEqual(sources._pending[0][0], "e1")
-        with patch("app.routes.events.resolve_event", side_effect=[RuntimeError("temporaire"), {}]) as resolve:
+        with patch("app.routes.events.resolve_event", side_effect=[RuntimeError("temporaire"), {}]) as resolve, \
+                patch("app.services.sources.simulation_activity.record"):
             sources._resolve_expired()
             self.assertEqual(len(sources._pending), 1)
             sources._resolve_expired()

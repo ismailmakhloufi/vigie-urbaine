@@ -23,6 +23,7 @@ from app.services import dispatcher as dispatcher_service
 from app.services import replay
 from app.services import notifications
 from app.services import source_health
+from app.services import simulation_activity
 from app.services.security import (router as auth_router, validate_config,
                                    current_actor, allowed_origins)
 from app.core.config import get_settings
@@ -51,15 +52,13 @@ async def lifespan(app: FastAPI):
         mongo_client._db.login_attempts.create_index("until", expireAfterSeconds=0)
     notifications.ensure_indexes()
     source_health.ensure_indexes()
+    simulation_activity.ensure_indexes()
     notifications.reconcile_current()
-    # le monde s'agite des qu'on demarre : flux agences en ligne
-    sources.start_stream()
-    # file d'attente des appels sans vehicule : rappel automatique
-    dispatcher_service.start_queue()
-    replay.start_recorder()
+    # Aucun processus de simulation ne démarre sans action explicite de l'opérateur.
     yield
     replay.stop_recorder()
-    sources.stop_stream()
+    sources.stop_stream("API arrêtée — simulation interrompue")
+    dispatcher_service.stop_queue()
     neo4j_client.close()
     mongo_client.close()
 

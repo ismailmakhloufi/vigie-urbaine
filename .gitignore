@@ -1,6 +1,7 @@
 # Environnement / secrets
 .env
 backend/.env
+backend/.env.previous
 
 # Python
 backend/.venv/

@@ -22,12 +22,16 @@ class SourceHealthTests(unittest.TestCase):
                                   return_value={"online": True, "paused": False})
         self.settings_patch = patch("app.main.get_settings",
                                     return_value=SimpleNamespace(security_mode="demo"))
-        for item in (self.db_patch, self.stream_patch, self.settings_patch):
+        self.close_patch = patch("app.main.mongo_client.close")
+        self.neo_close_patch = patch("app.main.neo4j_client.close")
+        for item in (self.db_patch, self.stream_patch, self.settings_patch,
+                     self.close_patch, self.neo_close_patch):
             item.start()
         source_health.ensure_indexes()
 
     def tearDown(self):
-        for item in (self.settings_patch, self.stream_patch, self.db_patch):
+        for item in (self.neo_close_patch, self.close_patch, self.settings_patch,
+                     self.stream_patch, self.db_patch):
             item.stop()
 
     def test_lecture_recente_silence_et_pause_sans_mutation(self):

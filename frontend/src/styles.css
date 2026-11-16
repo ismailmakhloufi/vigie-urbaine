@@ -136,6 +136,28 @@ button:disabled { cursor: not-allowed; }
 .source-no_data strong { color: var(--ink-dim); }
 .source-stream_offline strong { color: var(--rouge); }
 .source-paused strong { color: var(--cyan); }
+.simulation-control { display: grid; gap: 6px; margin: 10px 0 15px; }
+.simulation-control button {
+  padding: 11px; font: 11px var(--font-mono); font-weight: 700; cursor: pointer;
+  border: 1px solid var(--vert); background: rgba(61, 220, 151, .12); color: var(--vert);
+}
+.simulation-control button:hover:not(:disabled) { background: rgba(61, 220, 151, .23); }
+.simulation-control button.simulation-stop { border-color: var(--rouge); color: var(--rouge); background: rgba(255, 77, 94, .09); }
+.simulation-control button.simulation-stop:hover:not(:disabled) { background: rgba(255, 77, 94, .18); }
+.simulation-control button:disabled { opacity: .5; cursor: not-allowed; }
+.simulation-control small { color: var(--ink-dim); line-height: 1.4; font-size: 10px; }
+.simulation-activity { padding: 10px; border: 1px solid var(--line); background: var(--bg-panel-2); }
+.simulation-activity-list { display: grid; gap: 0; max-height: 260px; overflow-y: auto; }
+.simulation-activity-row { display: grid; grid-template-columns: 65px minmax(0, 1fr); gap: 7px;
+  border-top: 1px solid var(--line); padding: 7px 0; font-size: 10px; line-height: 1.35; }
+.simulation-activity-row time { color: var(--cyan); font: 9px var(--font-mono); }
+.simulation-activity-row b { color: var(--ambre); }
+.simulation-activity-row small { display: block; color: var(--ink-dim); margin-top: 3px; }
+.action-start b { color: var(--vert); }
+.action-stop b, .action-weather_error b { color: var(--rouge); }
+.simulation-more { width: 100%; margin-top: 8px; padding: 7px; cursor: pointer;
+  color: var(--cyan); background: transparent; border: 1px solid var(--line); font: 10px var(--font-mono); }
+.simulation-more:hover:not(:disabled) { border-color: var(--cyan); }
 .map-notification-focus {
   position: absolute; z-index: 1000; left: 50%; top: 70px;
   transform: translateX(-50%); width: min(420px, calc(100% - 32px));

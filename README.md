@@ -4,7 +4,15 @@ Console tactique académique pour le Grand Tunis. Les appels, agences, missions 
 
 ## Démarrage local
 
-Prérequis : Docker, Python et Node.js. Copier `.env.example` vers `backend/.env`, puis démarrer les bases avec `docker compose up -d`. Installer `backend/requirements.txt`, démarrer `uvicorn app.main:app --host 127.0.0.1 --port 8000` depuis `backend`, puis `npm ci` et `npm run dev` depuis `frontend`. L'interface est sur `http://localhost:5173`.
+Prérequis : Docker, Python et Node.js. Choisir une instance de bases : pour l'ancienne simulation, `docker compose up -d` ; pour la nouvelle installation vierge, suivre la section ci-dessous. Installer `backend/requirements.txt`, démarrer `uvicorn app.main:app --host 127.0.0.1 --port 8000` depuis `backend`, puis `npm ci` et `npm run dev` depuis `frontend`. L'interface est sur `http://localhost:5173`. Lancer `npm run dev` **depuis `frontend`**, pas depuis la racine du dépôt.
+
+### Démarrage vierge sans effacer l'ancienne simulation
+
+L'instance `docker-compose.fresh.yml` utilise **d'autres volumes et d'autres ports** (MongoDB 27018, Neo4j 7688/7475). Les bases d'origine restent intactes. La configuration locale `backend/.env` pointe vers cette instance neuve ; l'ancienne configuration est conservée localement sous `backend/.env.previous` (fichier ignoré par Git). Pour préparer une autre machine : `docker compose -f docker-compose.fresh.yml up -d --wait`, puis `docker compose -f docker-compose.fresh.yml exec -T neo4j cypher-shell -u neo4j -p urbanbutterfly -f /seed.cypher` et définir `MONGO_URI=mongodb://admin:urbanbutterfly@localhost:27018`, `MONGO_DB=urban_butterfly_clean`, `NEO4J_URI=bolt://localhost:7688` dans `backend/.env`. Les valeurs par défaut sont réservées à la démonstration locale. Ne jamais utiliser `docker compose down -v` pour revenir à une ancienne instance.
+
+Au lancement de l'API, le **simulateur reste arrêté** : il ne génère ni appel, ni incident, ni notification. L'opérateur clique « Démarrer le simulateur » pour déclencher le flux, et « Arrêter » pour le suspendre. Le journal des actions recense démarrages, arrêts, appels, dispatch, incidents, résolutions automatiques, missions et lectures météo. La relecture et les rappels automatiques ne tournent que pendant la simulation. Les projections « What-if » restent utilisables sans modifier la crise.
+
+Pour revenir à l'ancienne installation, redémarrer ses bases avec `docker compose up -d`, remettre `backend/.env.previous` à la place de `backend/.env` puis redémarrer l'API. Ne pas supprimer les volumes Docker. Le journal conserve toutes les actions en base ; la console affiche les 60 plus récentes et permet de charger les précédentes.
 
 `SECURITY_MODE=demo` conserve l'accès local non authentifié pour l'enseignement. **Ne jamais rendre l'API, Vite ou les bases accessibles depuis Internet dans ce mode.** Les ports des bases sont limités à `127.0.0.1` par défaut.
 
@@ -19,7 +27,7 @@ Les sessions expirent au bout de huit heures et sont invalidées à la déconnex
 
 ## Relecture de crise
 
-Un instantané de la situation est conservé toutes les **30 secondes** dans `crisis_snapshots` (rétention **24 heures**). Le bouton « Relecture de crise » ouvre une vue indépendante en lecture seule : risques, statuts des infrastructures et de la flotte, incidents et missions observés. L'API `GET /replay` liste les captures (pagination `before` possible), `GET /replay/{id}` renvoie un instantané.
+Pendant que le simulateur est lancé, un instantané de la situation est conservé toutes les **30 secondes** dans `crisis_snapshots` (rétention **24 heures**). Aucun instantané n'est créé avant le lancement manuel. Le bouton « Relecture de crise » ouvre une vue indépendante en lecture seule : risques, statuts des infrastructures et de la flotte, incidents et missions observés. L'API `GET /replay` liste les captures (pagination `before` possible), `GET /replay/{id}` renvoie un instantané.
 
 Ces archives ne reconstruisent **pas** la période antérieure à leur activation ; les scores passés ne sont jamais recalculés avec le graphe actuel. MongoDB et Neo4j sont lus successivement dans une courte fenêtre, pas dans une transaction commune. La carte utilise la géométrie de référence actuelle, mais les statuts et scores enregistrés. L'archive n'exécute aucune action sur la crise vivante.
 

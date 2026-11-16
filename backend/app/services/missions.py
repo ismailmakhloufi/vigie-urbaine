@@ -77,6 +77,9 @@ def _log(doc: dict, code: str, message: str):
     doc.setdefault("timeline", []).append(
         {"code": code, "message": message, "at": _iso(_now())}
     )
+    if code in {"ARRIVE", "BLOCKED", "REROUTE", "RADIO", "CORRIDOR", "CANCEL"}:
+        from app.services import simulation_activity
+        simulation_activity.record("MISSION", message, "suivi de flotte", doc.get("mission_id"))
 
 
 def _next_mission_id() -> str:
@@ -387,7 +390,9 @@ def _maybe_end_corridor(doc: dict):
 
 def list_missions(limit: int = 30) -> list[dict]:
     """Tick toutes les missions actives puis renvoie les instantanes."""
-    ticked = {doc["mission_id"]: _tick_mission(doc) for doc in mongo_client.active_missions()}
+    from app.services import sources
+    ticked = ({doc["mission_id"]: _tick_mission(doc) for doc in mongo_client.active_missions()}
+              if sources.stream_status()["online"] else {})
     result = list(ticked.values())
 
     seen = set(ticked)

@@ -78,6 +78,10 @@ export const getCalls = (limit = 8) =>
   apiFetch(`/integration/calls?limit=${limit}`);
 
 export const getStream = () => apiFetch("/integration/stream");
+export const getSimulationActivity = (before = null) => apiFetch(
+  `/integration/activity?limit=60${before
+    ? `&before_at=${encodeURIComponent(before.at)}&before_id=${encodeURIComponent(before.id)}` : ""}`
+);
 export const getSourceHealth = () => apiFetch("/integration/sources");
 
 export const postStreamAction = (action) =>

@@ -238,6 +238,13 @@ def start_queue():
     _file_thread.start()
 
 
+def stop_queue():
+    """Arrête les relances automatiques lorsque l'opérateur stoppe la simulation."""
+    _file_stop.set()
+    if _file_thread and _file_thread.is_alive():
+        _file_thread.join(timeout=3)
+
+
 def recover_reservations():
     """Après un arrêt au milieu du routage, achever ou annuler les réservations."""
     for vehicle in mongo_client._db.vehicles.find({"status": "RESERVED"}):

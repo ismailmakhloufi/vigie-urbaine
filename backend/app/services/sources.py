@@ -17,19 +17,22 @@ ville vit, se blesse et se repare seule. L'operateur supervise et decide
 (corridor, imposer un itineraire, radio, resoudre). Rien d'autre.
 
 GET  /integration/stream -> statut du flux + statistiques
-POST /integration/stream {"action": "pause"|"resume"}
+POST /integration/stream {"action": "start"|"stop"}
 """
 
 import random
 import threading
 import time
 import json
+import logging
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
 from app.db.mongo_client import mongo_client
 from app.db.neo4j_client import neo4j_client
-from app.services import dispatcher
+from app.services import dispatcher, simulation_activity
+
+logger = logging.getLogger(__name__)
 
 # ----- rythmes du monde -----
 CALL_EVERY = (35, 90)        # intervalle entre appels d'urgence (s)
@@ -63,8 +66,8 @@ TECH_TARGETS = [f"P{i}" for i in range(1, 6)] + [f"T{i}" for i in range(1, 11)]
 
 _thread: threading.Thread | None = None
 _stop = threading.Event()
-_pause = threading.Event()
 _lock = threading.Lock()
+_control_lock = threading.Lock()
 _stats = {"calls": 0, "incidents": 0, "resolved": 0, "alertes_meteo": 0, "rejets": 0, "doublons": 0}
 _pending: list[tuple[str, float]] = []  # (event_id, expires_at)
 _started_at: str | None = None
@@ -82,6 +85,11 @@ def _push_call():
     try:
         call = dispatcher.random_call()
         _stats["calls"] += 1
+        simulation_activity.record("CALL", f"Appel {call['kind']} vers {call['destination_id']} · {call['status']}",
+                                   "CACU simulé", call["call_id"])
+        if call.get("mission_id"):
+            simulation_activity.record("DISPATCH", f"Mission {call['mission_id']} confiée à {call.get('assigned_vehicle')}",
+                                       "dispatcher", call["mission_id"])
         if call.get("status") in ("PENDING", "ROUTE_UNAVAILABLE"):
             print(
                 f"[sources] appel #{_stats['calls']} : {call['call_id']} "
@@ -157,8 +165,12 @@ def _in_cooldown(zone_id: str) -> bool:
 def _weather_tick():
     """Lecture reelle des 4 capteurs ; HEAVY_RAIN automatique aux seuils."""
     for sensor in SENSORS:
+        if _stop.is_set():
+            return
         try:
             current = fetch_weather(sensor["lat"], sensor["lon"])
+            if _stop.is_set():
+                return
             if not isinstance(current, dict) or not any(
                 current.get(field) is not None for field in
                 ("temperature_2m", "precipitation", "wind_speed_10m", "relative_humidity_2m")
@@ -166,6 +178,8 @@ def _weather_tick():
                 raise ValueError("mesure météo absente")
         except Exception as exc:
             print(f"[sources] capteur {sensor['sensor_id']} : echec meteo ({exc})")
+            simulation_activity.record("WEATHER_ERROR", f"Mesure indisponible : {sensor['zone_name']}",
+                                       "Open-Meteo", sensor["sensor_id"])
             continue
 
         reading = {
@@ -180,6 +194,8 @@ def _weather_tick():
             "timestamp": _utc_now(),
         }
         mongo_client._db.sensor_readings.insert_one(reading)
+        simulation_activity.record("WEATHER", f"Mesure {sensor['zone_name']} · pluie {reading['rainfall_mm']} mm, vent {reading['wind_kmh']} km/h",
+                                   "Open-Meteo (observation)", sensor["sensor_id"])
 
         severity, event_type = weather_risk(current)
         if event_type and not _in_cooldown(sensor["zone"]):
@@ -268,6 +284,9 @@ def _register(event_id: str | None):
         return
     _stats["incidents"] += 1
     event = mongo_client.get_event(event_id)
+    if event:
+        simulation_activity.record("INCIDENT", f"{event['type']} · {event['target_id']} · {event['severity']}",
+                                   str((event.get("payload") or {}).get("source") or "simulation"), event_id)
     if event and event.get("auto_resolve_at"):
         with _lock:
             _pending.append((event_id, event["auto_resolve_at"].timestamp()))
@@ -295,6 +314,8 @@ def _resolve_expired():
         try:
             resolve_event(eid)
             _stats["resolved"] += 1
+            simulation_activity.record("RESOLVED", f"Incident {eid[:8]} résolu automatiquement",
+                                       "simulateur", eid)
             print(f"[sources] incident #{eid[:8]} resolu naturellement")
         except Exception as exc:
             print(f"[sources] resolution ratee ({eid[:8]}) : {exc}")
@@ -317,6 +338,34 @@ def _restore_pending():
         _pending[:] = restored
 
 
+def _resume_clock():
+    """Le temps simulé ne s'écoule pas entre deux actions manuelles de démarrage."""
+    control = mongo_client._db.simulation_control.find_one({"_id": "clock"})
+    stopped = control.get("stopped_at") if control else None
+    if stopped:
+        if stopped.tzinfo is None:
+            stopped = stopped.replace(tzinfo=timezone.utc)
+        delta = datetime.now(timezone.utc) - stopped
+        for event in mongo_client._db.events.find({"status": "ACTIVE", "auto_resolve_at": {"$exists": True}}):
+            mongo_client._db.events.update_one({"_id": event["_id"]},
+                {"$set": {"auto_resolve_at": event["auto_resolve_at"] + delta}})
+        for mission in mongo_client._db.missions.find({"status": {"$in": ["EN_ROUTE", "DIVERTED"]}}):
+            fields = {"departure_at": mission["departure_at"] + delta}
+            if mission.get("corridor_until"):
+                fields["corridor_until"] = (datetime.fromisoformat(mission["corridor_until"]) + delta).isoformat()
+            mongo_client._db.missions.update_one({"_id": mission["_id"]},
+                {"$set": fields})
+        for vehicle in mongo_client._db.vehicles.find({"status": "RETURNING"}):
+            fields = {}
+            for key in ("return_started", "return_until"):
+                if vehicle.get(key):
+                    fields[key] = (datetime.fromisoformat(vehicle[key]) + delta).isoformat()
+            if fields:
+                mongo_client._db.vehicles.update_one({"_id": vehicle["_id"]}, {"$set": fields})
+    mongo_client._db.simulation_control.update_one({"_id": "clock"},
+        {"$set": {"stopped_at": None}}, upsert=True)
+
+
 def _loop():
     print("[sources] flux automatique demarre (appels + voirie + SIEM + SCADA)")
     clock = 0.0                       # temps du flux (gele pendant la pause)
@@ -326,62 +375,70 @@ def _loop():
 
     while not _stop.is_set():
         _stop.wait(0.5)
-        if _stop.is_set() or _pause.is_set():
-            continue  # pause : le temps du flux est gele
+        if _stop.is_set():
+            continue
         clock += 0.5
 
         if clock >= next_call:
             _push_call()
             next_call = clock + random.uniform(*CALL_EVERY)
 
-        if clock >= next_incident:
+        if not _stop.is_set() and clock >= next_incident:
             _push_incident()
             next_incident = clock + random.uniform(*INCIDENT_EVERY)
 
-        if clock >= next_weather:
+        if not _stop.is_set() and clock >= next_weather:
             try:
                 _weather_tick()
             except Exception as exc:
                 print(f"[sources] tour meteo ratee : {exc}")
             next_weather = clock + WEATHER_EVERY
 
-        _resolve_expired()
+        if not _stop.is_set():
+            _resolve_expired()
 
     print("[sources] flux automatique arrete")
 
 
 def start_stream() -> dict:
     global _thread, _started_at
-    if _thread and _thread.is_alive():
-        return {"status": "already_running"}
-    _restore_pending()
-    _stop.clear()
-    _pause.clear()
-    _started_at = _utc_now()
-    _thread = threading.Thread(target=_loop, daemon=True, name="ub-sources")
-    _thread.start()
-    return {"status": "started"}
+    with _control_lock:
+        if _thread and _thread.is_alive():
+            if _stop.is_set():
+                return {"status": "stopping"}
+            return {"status": "already_running"}
+        _resume_clock()
+        _restore_pending()
+        _stop.clear()
+        _started_at = _utc_now()
+        _thread = threading.Thread(target=_loop, daemon=True, name="ub-sources")
+        _thread.start()
+        simulation_activity.record("START", "Simulateur démarré par l'opérateur")
+        return {"status": "started"}
 
 
-def stop_stream() -> dict:
-    _stop.set()
-    return {"status": "stopping"}
-
-
-def set_paused(paused: bool) -> dict:
-    if paused:
-        _pause.set()
-        return {"status": "paused"}
-    _pause.clear()
-    return {"status": "resumed"}
+def stop_stream(reason: str = "Simulateur arrêté par l'opérateur") -> dict:
+    with _control_lock:
+        was_running = bool(_thread and _thread.is_alive() and not _stop.is_set())
+        _stop.set()
+        if was_running:
+            try:
+                mongo_client._db.simulation_control.update_one({"_id": "clock"},
+                    {"$set": {"stopped_at": datetime.now(timezone.utc)}}, upsert=True)
+            except Exception:
+                logger.exception("Horloge de simulation indisponible lors de l'arrêt")
+            simulation_activity.record("STOP", reason)
+            _thread.join(timeout=12)
+        return {"status": "stopping" if _thread and _thread.is_alive() else "stopped"}
 
 
 def stream_status() -> dict:
     with _lock:
         en_attente = len(_pending)
     return {
-        "online": bool(_thread and _thread.is_alive() and not _pause.is_set()),
-        "paused": _pause.is_set(),
+        "online": bool(_thread and _thread.is_alive() and not _stop.is_set()),
+        "paused": False,
+        "running": bool(_thread and _thread.is_alive() and not _stop.is_set()),
         "started_at": _started_at,
         "pending_resolutions": en_attente,
         "stats": dict(_stats),

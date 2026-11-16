@@ -59,7 +59,9 @@ def ensure_fleet() -> int:
 
 def list_fleet() -> list[dict]:
     ensure_fleet()
-    _tick_retours()
+    from app.services import sources
+    if sources.stream_status()["online"]:
+        _tick_retours()
     out = []
     for v in mongo_client.list_vehicles():
         v = dict(v)

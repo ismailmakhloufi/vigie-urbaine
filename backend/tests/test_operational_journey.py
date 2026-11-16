@@ -59,13 +59,15 @@ class OperationalJourneyTests(unittest.TestCase):
         self.assertEqual(call_notification["state"], "NEW")
 
         future = datetime.now(timezone.utc) + timedelta(minutes=10)
-        with patch("app.services.missions._now", return_value=future):
+        with patch("app.services.missions._now", return_value=future), \
+                patch("app.services.sources.stream_status", return_value={"online": True}):
             missions = self.client.get("/missions").json()
         mission = next(m for m in missions if m["mission_id"] == call["mission_id"])
         self.assertEqual(mission["status"], "ARRIVED")
         self.assertEqual(self.db.vehicles.find_one({"callsign": vehicle})["status"], "RETURNING")
 
-        with patch("app.services.fleet._now", return_value=future):
+        with patch("app.services.fleet._now", return_value=future), \
+                patch("app.services.sources.stream_status", return_value={"online": True}):
             self.client.get("/fleet")
         self.assertEqual(self.db.vehicles.find_one({"callsign": vehicle})["status"], "AVAILABLE")
         self.assertEqual(self.db.notifications.count_documents({"category": "MISSION"}), 1)

@@ -16,12 +16,14 @@ Console :
     POST /integration/demo          : orchestrateur de demo
 """
 
-from fastapi import APIRouter, HTTPException
+from datetime import datetime
+
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.services import dispatcher, fleet, missions
 from app.services import sources
-from app.services import source_health
+from app.services import source_health, replay, simulation_activity
 from app.services.routing import compute_route_options
 
 
@@ -63,7 +65,7 @@ class ChooseRouteRequest(BaseModel):
 
 
 class StreamAction(BaseModel):
-    action: str = Field(pattern="^(pause|resume)$")
+    action: str = Field(pattern="^(start|stop|pause|resume)$")
 
 
 # ----- sources -----
@@ -111,8 +113,25 @@ def sources_state():
 
 @router.post("/integration/stream")
 def stream_action(action: StreamAction):
-    sources.set_paused(action.action == "pause")
+    if action.action in ("stop", "pause"):
+        sources.stop_stream()
+        dispatcher.stop_queue()
+        replay.stop_recorder()
+    else:
+        result = sources.start_stream()
+        if result["status"] == "stopping":
+            raise HTTPException(409, "Arrêt en cours ; réessayez dans quelques secondes")
+        dispatcher.start_queue()
+        replay.start_recorder()
     return sources.stream_status()
+
+
+@router.get("/integration/activity")
+def activity(limit: int = Query(default=60, ge=1, le=100),
+             before_at: datetime | None = None, before_id: str | None = None):
+    if bool(before_at) != bool(before_id):
+        raise HTTPException(422, "Date et identifiant du curseur requis ensemble")
+    return simulation_activity.recent(limit, before_at, before_id)
 
 
 # ----- console -----

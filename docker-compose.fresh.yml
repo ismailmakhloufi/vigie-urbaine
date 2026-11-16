@@ -1,0 +1,43 @@
+name: urban-butterfly-fresh
+
+# Instance locale vierge ; les volumes et conteneurs de docker-compose.yml
+# restent intacts. Ne pas utiliser `down -v` pour arrêter cette instance.
+services:
+  neo4j:
+    image: neo4j:5.26
+    container_name: ub_fresh_neo4j
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-urbanbutterfly}
+      - NEO4J_server_memory_heap_initial__size=256m
+      - NEO4J_server_memory_heap_max__size=768m
+    ports:
+      - "127.0.0.1:7475:7474"
+      - "127.0.0.1:7688:7687"
+    volumes:
+      - neo4j_data_fresh:/data
+      - ./data/seed.cypher:/seed.cypher:ro
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$${NEO4J_AUTH#*/}\" 'RETURN 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  mongodb:
+    image: mongo:7
+    container_name: ub_fresh_mongo
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-urbanbutterfly}
+    ports:
+      - "127.0.0.1:27018:27017"
+    volumes:
+      - mongo_data_fresh:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval '{ db.adminCommand({ping: 1}).ok }' -u admin -p \"$${MONGO_INITDB_ROOT_PASSWORD}\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  neo4j_data_fresh:
+  mongo_data_fresh:
