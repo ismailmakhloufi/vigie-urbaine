@@ -46,7 +46,7 @@ function SecureApp() {
   if (!session) return (
     <main className="auth-screen">
       <form className="auth-card" onSubmit={submit}>
-        <small>URBAN BUTTERFLY // ACCÈS CONTRÔLÉ</small>
+        <small>VIGIE URBAINE // ACCÈS CONTRÔLÉ</small>
         <h1>Poste de commandement</h1>
         <p>Simulation urbaine du Grand Tunis. Accès réservé aux comptes autorisés.</p>
         <label>Identifiant

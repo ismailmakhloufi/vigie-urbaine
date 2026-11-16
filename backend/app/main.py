@@ -15,7 +15,6 @@ from app.routes.risk import router as risk_router
 from app.routes.whatif import router as whatif_router
 from app.routes.missions import router as missions_router
 from app.routes.dispatch import router as dispatch_router
-from app.routes.ai import router as ai_router
 from app.routes.replay import router as replay_router
 from app.routes.notifications import router as notifications_router
 from app.services import sources
@@ -64,7 +63,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Urban Butterfly API",
+    title="Vigie Urbaine API",
     description="Intelligent Urban Cascade Risk Simulator",
     version="0.1.0",
     lifespan=lifespan,
@@ -106,7 +105,7 @@ async def secure_console(request, call_next):
                 if path == "/auth/audit" and actor["role"] != "operator":
                     _audit(request, actor, 403)
                     return JSONResponse({"detail": "Journal réservé à l'opérateur"}, status_code=403)
-                analytical = path in ("/whatif", "/route-options", "/ai/ask", "/ai/briefing", "/auth/logout")
+                analytical = path in ("/whatif", "/route-options", "/auth/logout")
                 if unsafe and actor["role"] == "viewer" and not analytical:
                     _audit(request, actor, 403)
                     return JSONResponse({"detail": "Droits opérateur requis"}, status_code=403)
@@ -122,7 +121,6 @@ app.include_router(whatif_router)
 app.include_router(missions_router)
 app.include_router(dispatch_router)
 app.include_router(infra_router)
-app.include_router(ai_router)
 app.include_router(auth_router)
 app.include_router(replay_router)
 app.include_router(notifications_router)
@@ -130,7 +128,7 @@ app.include_router(notifications_router)
 
 @app.get("/", tags=["Monitoring"])
 def root():
-    return {"project": "Urban Butterfly", "status": "running"}
+    return {"project": "Vigie Urbaine", "status": "running"}
 
 
 @app.get("/health", tags=["Monitoring"])

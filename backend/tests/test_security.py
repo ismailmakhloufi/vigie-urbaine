@@ -18,6 +18,11 @@ SETTINGS = SimpleNamespace(
 
 
 class SecurityTests(unittest.TestCase):
+    def test_assistant_ia_retire_de_l_api(self):
+        paths = {route.path for route in app.routes if hasattr(route, "path")}
+        self.assertNotIn("/ai/ask", paths)
+        self.assertNotIn("/ai/briefing", paths)
+
     def setUp(self):
         self.config = patch("app.main.get_settings", return_value=SETTINGS)
         self.config.start()

@@ -23,8 +23,6 @@ import {
   getEvents,
   getEventImpact,
   getEventRecommendations,
-  aiAsk,
-  aiBriefing,
   postEvent,
   postWhatif,
   resolveEvent,
@@ -191,10 +189,6 @@ export default function App({ readonly = false, secured = false }) {
   const notificationAnalysisRequest = useRef(0);
   const [notificationImpact, setNotificationImpact] = useState(null);
   const [notificationImpactError, setNotificationImpactError] = useState(null);
-  const [chat, setChat] = useState([]);
-  const [chatInput, setChatInput] = useState("");
-  const [chatBusy, setChatBusy] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
   const [missions, setMissions] = useState([]);
   const [flotte, setFlotte] = useState([]);
   const [appels, setAppels] = useState([]);
@@ -208,7 +202,6 @@ export default function App({ readonly = false, secured = false }) {
   const [sourceHealth, setSourceHealth] = useState(null);
   const [sourceHealthError, setSourceHealthError] = useState(null);
   const [comparateur, setComparateur] = useState(null);
-  const chatLog = useRef(null);
   const soundLedgerFallback = useRef(new Map());
 
   // double bip court (standard d'urgence) via WebAudio — aucun fichier
@@ -674,41 +667,13 @@ export default function App({ readonly = false, secured = false }) {
         );
         setFantomes([]);
         setPrediction(null);
-        setToast(`🦋 Incident propagé : ${resultat.impact.total_count} impact(s)`);
+        setToast(`Incident propagé : ${resultat.impact.total_count} impact(s)`);
         await refresh();
       }
     } catch (exc) {
       setToast(`⛔ ${exc.message}`);
     }
   };
-
-  const envoyerChat = async (question) => {
-    const q = (question || chatInput).trim();
-    if (!q || chatBusy) return;
-
-    const suivants = [...chat, { role: "user", text: q }];
-    setChat(suivants);
-    setChatInput("");
-    setChatBusy(true);
-
-    try {
-      if (q.toLowerCase() === "briefing") {
-        const r = await aiBriefing();
-        setChat([...suivants, { role: "ai", text: r.text, mode: r.mode }]);
-      } else {
-        const r = await aiAsk(q);
-        setChat([...suivants, { role: "ai", text: r.answer, mode: r.mode }]);
-      }
-    } catch (exc) {
-      setChat([...suivants, { role: "ai", text: `⛔ IA indisponible : ${exc.message}` }]);
-    } finally {
-      setChatBusy(false);
-    }
-  };
-
-  useEffect(() => {
-    if (chatLog.current) chatLog.current.scrollTop = chatLog.current.scrollHeight;
-  }, [chat]);
 
   const resoudre = async (id) => {
     try {
@@ -788,9 +753,8 @@ export default function App({ readonly = false, secured = false }) {
   return (
     <div className="app app-v2">
       <header className="header">
-        <div className="logo">🦋</div>
         <div className="titre">
-          <h1>Urban <span>Butterfly</span></h1>
+          <h1>Vigie <span>Urbaine</span></h1>
           <p>Centre d'analyse des risques urbains en cascade</p>
         </div>
         <button className="replay-entry" onClick={() => setReplayOpen(true)}>
@@ -1275,88 +1239,6 @@ export default function App({ readonly = false, secured = false }) {
         />
         {toast && <div className="toast">{toast}</div>}
       </main>
-
-      {chatOpen && (
-        <div className="messenger">
-          <div className="messenger-header">
-            <div className="messenger-identite">
-              <span className="messenger-avatar">🦋</span>
-              <div>
-                <b>Copilote IA</b>
-                <small>
-                  {chatBusy ? "écrit…" : "graphe + Llama 3.1 · Grand Tunis"}
-                </small>
-              </div>
-            </div>
-            <button
-              className="messenger-close"
-              onClick={() => setChatOpen(false)}
-              title="Fermer"
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="chat-log" ref={chatLog}>
-            {chat.length === 0 ? (
-              <div className="empty-state">
-                Interrogez le jumeau numérique : le graphe fournit les faits, l'IA reformule.
-              </div>
-            ) : (
-              chat.map((msg, i) => (
-                <div
-                  className={`chat-bubble msg-${msg.role}`}
-                  key={i}
-                >
-                  {msg.text}
-                  {msg.mode && (
-                    <div className="mode-note">
-                      {msg.mode === "llm" ? "graphe + Llama 3.1" : "résumé local (LLM off)"}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-            {chatBusy && (
-              <div className="chat-bubble msg-ai en-attente">
-                <span className="point-anim" />
-                <span className="point-anim" />
-                <span className="point-anim" />
-              </div>
-            )}
-          </div>
-
-          <div className="chat-chips">
-            <button onClick={() => envoyerChat("Pourquoi H1 est-il critique ?")}
-              disabled={chatBusy}>Pourquoi H1 ?</button>
-            <button onClick={() => envoyerChat("Que faire pour R19 ?")}
-              disabled={chatBusy}>Plan R19</button>
-            <button onClick={() => envoyerChat("Briefing")}
-              disabled={chatBusy}>📋 Briefing</button>
-          </div>
-
-          <div className="chat-input">
-            <input
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") envoyerChat(); }}
-              placeholder="Poser une question au jumeau numérique..."
-              disabled={chatBusy}
-            />
-            <button onClick={() => envoyerChat()} disabled={chatBusy || !chatInput.trim()}>
-              {chatBusy ? "…" : "→"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      <button
-        className={`fab-copilote ${chatOpen ? "ouvert" : ""}`}
-        onClick={() => setChatOpen((o) => !o)}
-        title="Copilote IA"
-      >
-        {chatOpen ? "✕" : "🦋"}
-      </button>
 
       <aside className="risk-center">
         <div className="risk-center-header">

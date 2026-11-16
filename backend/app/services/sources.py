@@ -1,5 +1,5 @@
 """
-Urban Butterfly - Simulateur de sources (le monde physique virtualise)
+Vigie Urbaine - Simulateur de sources (le monde physique virtualise)
 
 UN SEUL daemon fait vivre tout le flux de la ville, comme si des tiers
 poussaient leurs faits vers le systeme :

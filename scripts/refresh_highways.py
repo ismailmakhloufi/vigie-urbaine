@@ -1,5 +1,5 @@
 """
-Urban Butterfly - autoroutes A1 / A4 : geometrie reelle via Overpass (ref tag)
+Vigie Urbaine - autoroutes A1 / A4 : geometrie reelle via Overpass (ref tag)
 Chaine les troncons contigus et garde la plus longue chaine dans le bbox.
 """
 

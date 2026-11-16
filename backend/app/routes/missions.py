@@ -1,5 +1,5 @@
 """
-Urban Butterfly - Missions Router
+Vigie Urbaine - Missions Router
 
 GET  /missions               : instantane (positions, statuts, journaux)
 POST /missions/{id}/cancel   : annulation par le commandement

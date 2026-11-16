@@ -1,5 +1,5 @@
 """
-Urban Butterfly - Risk Engine v1.1
+Vigie Urbaine - Risk Engine v1.1
 
 Objectif :
 - calculer un score de risque explicable ;

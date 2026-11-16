@@ -1,5 +1,5 @@
 """
-Urban Butterfly - SysOps Recommendation Engine v1.0
+Vigie Urbaine - SysOps Recommendation Engine v1.0
 
 À partir d'un événement actif, le moteur produit un plan d'action :
 - Gardes/ressources à contacter (contacts).

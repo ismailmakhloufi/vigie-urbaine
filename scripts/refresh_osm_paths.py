@@ -1,5 +1,5 @@
 """
-Urban Butterfly - Rafraichissement geometrie routiere depuis OpenStreetMap
+Vigie Urbaine - Rafraichissement geometrie routiere depuis OpenStreetMap
 (geocodage Nominatim - polygon_geojson)
 
 Pour chacune des 30 routes :

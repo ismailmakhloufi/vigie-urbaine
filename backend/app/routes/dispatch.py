@@ -1,5 +1,5 @@
 """
-Urban Butterfly - Console dispatcher : integration, flotte, actions
+Vigie Urbaine - Console dispatcher : integration, flotte, actions
 
 Sources agences (route standard) :
     POST /integration/fleet-updates : une flotte pousse l'etat d'un vehicule

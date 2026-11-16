@@ -1,5 +1,5 @@
 """
-Urban Butterfly - Mission models (suivi SAMU / convois)
+Vigie Urbaine - Mission models (suivi SAMU / convois)
 
 Une mission = un appel (POST /missions) + un vehicule qui progresse
 le long du trajet calcule, avec detection de compromission en direct.

@@ -16,9 +16,6 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
 
-    ollama_url: str = "http://127.0.0.1:11434"
-    ollama_model: str = "llama3.1"
-
     security_mode: str = "demo"  # demo (localhost) ou secure (postes autorisés)
     auth_operator_password: str = ""
     auth_viewer_password: str = ""

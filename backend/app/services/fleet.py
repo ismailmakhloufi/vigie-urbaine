@@ -1,5 +1,5 @@
 """
-Urban Butterfly - Flotte (registry des véhicules du commandement)
+Vigie Urbaine - Flotte (registry des véhicules du commandement)
 
 Chaque agence (SAMU, dépôts municipaux, protection civile) pousse ses
 faits vers /integration/fleet-updates. Ce service fait vivre le registre :

@@ -1,5 +1,5 @@
 """
-Urban Butterfly - Mission service (suivi de vehicules type SAMU)
+Vigie Urbaine - Mission service (suivi de vehicules type SAMU)
 
 Cycle de vie :
     POST /missions           -> appel + depart (compute_route + journal)

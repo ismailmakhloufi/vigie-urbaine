@@ -58,7 +58,7 @@ export default function ReplayView({ infrastructure, onClose }) {
   return (
     <div className="replay-screen">
       <header className="replay-header">
-        <div><small>URBAN BUTTERFLY // ARCHIVES OBSERVÉES</small><h1>Relecture de crise</h1></div>
+        <div><small>VIGIE URBAINE // ARCHIVES OBSERVÉES</small><h1>Relecture de crise</h1></div>
         <button onClick={onClose}>← Retour au direct</button>
       </header>
       <div className="replay-timeline">

@@ -1,4 +1,4 @@
-# Urban Butterfly — simulateur de crises urbaines en cascade
+# Vigie Urbaine — simulateur de crises urbaines en cascade
 
 Console tactique académique pour le Grand Tunis. Les appels, agences, missions et incidents sont **simulés** ; les projections sont des estimations, pas des décisions opérationnelles ou des prévisions garanties.
 

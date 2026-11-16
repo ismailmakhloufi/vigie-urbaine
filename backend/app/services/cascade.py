@@ -1,5 +1,5 @@
 """
-Urban Butterfly - Cascade Engine v1.1
+Vigie Urbaine - Cascade Engine v1.1
 
 Rôle :
 - calculer la propagation d'un événement dans le graphe Neo4j ;

@@ -1,5 +1,5 @@
 """
-Urban Butterfly - Events Router v1.1
+Vigie Urbaine - Events Router v1.1
 
 Améliorations principales :
 - mémorise le statut précédent de l'infrastructure avant modification ;

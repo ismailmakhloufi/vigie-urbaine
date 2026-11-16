@@ -1,5 +1,5 @@
 """
-Urban Butterfly - Dispatcher automatique (standard de crise)
+Vigie Urbaine - Dispatcher automatique (standard de crise)
 
 Un appel entrant (pousse par le CACU via /integration/calls) est pris en
 charge IMMEDIATEMENT :

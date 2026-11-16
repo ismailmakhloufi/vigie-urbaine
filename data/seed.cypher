@@ -1,5 +1,5 @@
 // ============================================================
-// URBAN BUTTERFLY - Graphe v2 : ville MVP complete (section 19)
+// VIGIE URBAINE - Graphe v2 : ville MVP complete (section 19)
 // 4 zones <- 5 postes - 10 antennes - 5 hopitaux - 30 routes
 //               - 8 pharmacies - 3 depots
 // Idempotent : rejouer ne duplique rien (MERGE + IF NOT EXISTS)
@@ -227,7 +227,7 @@ MERGE (n)-[:LOCATED_IN]->(z);
 
 // ============================================================
 // ENRICHISSEMENT v3 - CASCADES MULTI-DOMAINES
-// Données synthétiques pour les scénarios Urban Butterfly.
+// Données synthétiques pour les scénarios Vigie Urbaine.
 // ============================================================
 
 // ------------------------------------------------------------
@@ -368,13 +368,13 @@ MATCH (r:Road {id:'R19'}) SET r.flood_susceptibility=5;
 // On garde une trace explicite qu'il s'agit d'un modèle académique.
 // ------------------------------------------------------------
 MATCH ()-[rel:DEPENDS_ON]->()
-SET rel.model='Urban Butterfly', rel.simulation=true;
+SET rel.model='Vigie Urbaine', rel.simulation=true;
 
 MATCH ()-[rel:SUPPLIED_BY]->()
-SET rel.model='Urban Butterfly', rel.simulation=true;
+SET rel.model='Vigie Urbaine', rel.simulation=true;
 
 MATCH ()-[rel:CONNECTED_BY]->()
-SET rel.model='Urban Butterfly', rel.simulation=true;
+SET rel.model='Vigie Urbaine', rel.simulation=true;
 
 // ============================================================
 // REQUETES DE CONTROLE (à lancer séparément si besoin)
