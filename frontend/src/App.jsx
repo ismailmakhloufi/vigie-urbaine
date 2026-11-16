@@ -17,11 +17,9 @@ import {
   getRisk,
   getInterventionPreview,
   getDecisionRanking,
-  getRiskEvolution,
   getAudit,
   getNotifications,
   acknowledgeNotification,
-  getEvents,
   getEventImpact,
   getEventRecommendations,
   postEvent,
@@ -158,7 +156,6 @@ function fusionnerActivite(current, incoming) {
 export default function App({ readonly = false, secured = false }) {
   const [infra, setInfra] = useState([]);
   const [risque, setRisque] = useState(null);
-  const [historique, setHistorique] = useState([]);
   const [cible, setCible] = useState(null);
   const [searchFocus, setSearchFocus] = useState(null);
   const [modeSimulation, setModeSimulation] = useState(false);
@@ -181,7 +178,6 @@ export default function App({ readonly = false, secured = false }) {
   const [decisionsBusy, setDecisionsBusy] = useState(false);
   const [scenarioId, setScenarioId] = useState(null);
   const [compareId, setCompareId] = useState(null);
-  const [evolution, setEvolution] = useState([]);
   const [audit, setAudit] = useState([]);
   const [replayOpen, setReplayOpen] = useState(false);
   const [notificationFilter, setNotificationFilter] = useState("NEW");
@@ -234,11 +230,10 @@ export default function App({ readonly = false, secured = false }) {
 
   const refresh = async () => {
     try {
-      const [infraData, riskData, eventsData, missionsData, flotteData, appelsData, fluxData] =
+      const [infraData, riskData, missionsData, flotteData, appelsData, fluxData] =
         await Promise.all([
           getInfrastructure(),
           getRisk(),
-          getEvents(20),
           getMissions(),
           getFleet(),
           getCalls(8),
@@ -246,7 +241,6 @@ export default function App({ readonly = false, secured = false }) {
         ]);
       setInfra(infraData);
       setRisque(riskData);
-      setHistorique(eventsData);
       setMissions(missionsData);
       setFlotte(flotteData);
       setAppels(appelsData);
@@ -324,13 +318,6 @@ export default function App({ readonly = false, secured = false }) {
       setControlBusy(false);
     }
   };
-
-  useEffect(() => {
-    const charger = () => getRiskEvolution().then(setEvolution).catch(() => {});
-    charger();
-    const timer = setInterval(charger, 20000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     if (!secured || readonly) return;
@@ -1522,37 +1509,6 @@ export default function App({ readonly = false, secured = false }) {
           </div>
         </section>
 
-        <section className="evolution-panel">
-          <div className="section-titre">Évolution après résolutions</div>
-          <p>Mesures enregistrées avant et après une résolution effective dans la simulation. D'autres incidents peuvent évoluer entre les deux lectures.</p>
-          {evolution.length === 0 ? (
-            <div className="empty-state">Aucune résolution suivie depuis l'activation de l'historique.</div>
-          ) : evolution.map((item) => (
-            <details className="evolution-row" key={item.event_id}>
-              <summary>
-                <b>{ETYPES_FR[item.event_type] || item.event_type} · {item.target_id}</b>
-                <small>{new Date(item.recorded_at).toLocaleString("fr-FR")}</small>
-                <span>Risques élevés/critiques : {item.before_high} → {item.after_high}</span>
-              </summary>
-              <p>Incidents actifs : {item.before_incidents} → {item.after_incidents} · {item.changed_count} score(s) modifié(s)</p>
-              {(item.top_changes || []).map((n) => (
-                <div key={n.id}>{n.name} · {n.before} → {n.after}/100</div>
-              ))}
-            </details>
-          ))}
-        </section>
-
-        <section className="history-mini">
-          <div className="section-titre">Derniers événements</div>
-          {historique.slice(0, 5).map((ev, i) => (
-            <div className="history-row" key={ev.id || i}>
-              <span>{new Date(ev.timestamp).toLocaleTimeString("fr-FR", { hour12: false })}</span>
-              <b>{ETYPES_FR[ev.type] || ev.type}</b>
-              <span>→ {ev.target_id}</span>
-              <i className={ev.status === "RESOLVED" ? "resolved" : "active"} />
-            </div>
-          ))}
-        </section>
       </aside>
 
       {erreur && <div className="connection-banner" role="alert">

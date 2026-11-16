@@ -38,8 +38,6 @@ export const getRisk = () => apiFetch("/risk");
 export const getInterventionPreview = (eventId) =>
   apiFetch(`/risk/intervention/${encodeURIComponent(eventId)}`);
 export const getDecisionRanking = () => apiFetch("/risk/decisions");
-export const getRiskEvolution = () => apiFetch("/risk/evolution?limit=8");
-export const getEvents = (limit = 20) => apiFetch(`/events?limit=${limit}`);
 
 export const postEvent = (body) =>
   apiFetch("/events", { method: "POST", body: JSON.stringify(body) });
