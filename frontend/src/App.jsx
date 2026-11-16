@@ -29,7 +29,6 @@ import {
   getFleet,
   getCalls,
   getStream,
-  getSimulationActivity,
   postStreamAction,
   postRouteOptions,
   postCorridor,
@@ -137,12 +136,6 @@ function ScenarioCompare({ scenario }) {
   );
 }
 
-function fusionnerActivite(current, incoming) {
-  const unique = new Map([...current, ...incoming].map((entry) => [entry.id, entry]));
-  return [...unique.values()].sort((a, b) =>
-    new Date(b.at) - new Date(a.at) || b.id.localeCompare(a.id));
-}
-
 export default function App({ readonly = false, secured = false }) {
   const [infra, setInfra] = useState([]);
   const [risque, setRisque] = useState(null);
@@ -182,12 +175,7 @@ export default function App({ readonly = false, secured = false }) {
   const [flotte, setFlotte] = useState([]);
   const [appels, setAppels] = useState([]);
   const [flux, setFlux] = useState(null);
-  const [simulationActivity, setSimulationActivity] = useState([]);
-  const [activityHasMore, setActivityHasMore] = useState(false);
-  const [activityBusy, setActivityBusy] = useState(false);
-  const activityPaging = useRef(false);
   const [controlBusy, setControlBusy] = useState(false);
-  const [activityError, setActivityError] = useState(null);
   const [comparateur, setComparateur] = useState(null);
   const soundLedgerFallback = useRef(new Map());
 
@@ -245,36 +233,6 @@ export default function App({ readonly = false, secured = false }) {
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    const charger = () => getSimulationActivity().then((rows) => {
-      if (active) {
-        setSimulationActivity((current) => fusionnerActivite(current, rows));
-        if (!activityPaging.current) setActivityHasMore(rows.length === 60);
-        setActivityError(null);
-      }
-    }).catch(() => { if (active) setActivityError("Journal temporairement indisponible"); });
-    charger();
-    const timer = setInterval(charger, 4000);
-    return () => { active = false; clearInterval(timer); };
-  }, []);
-
-  const chargerActivitePrecedente = async () => {
-    if (activityBusy || !activityHasMore || !simulationActivity.length) return;
-    setActivityBusy(true);
-    try {
-      const rows = await getSimulationActivity(simulationActivity.at(-1));
-      activityPaging.current = true;
-      setSimulationActivity((current) => fusionnerActivite(current, rows));
-      setActivityHasMore(rows.length === 60);
-      setActivityError(null);
-    } catch {
-      setActivityError("Chargement des actions précédentes indisponible");
-    } finally {
-      setActivityBusy(false);
-    }
-  };
-
   const piloterSimulation = async () => {
     if (controlBusy || readonly || !flux) return;
     const action = flux.online ? "stop" : "start";
@@ -282,13 +240,6 @@ export default function App({ readonly = false, secured = false }) {
     try {
       setFlux(await postStreamAction(action));
       setToast(action === "start" ? "▶ Simulation démarrée par vous" : "■ Simulation arrêtée");
-      try {
-        const rows = await getSimulationActivity();
-        setSimulationActivity((current) => fusionnerActivite(current, rows));
-        if (!activityPaging.current) setActivityHasMore(rows.length === 60);
-      } catch {
-        setActivityError("Journal temporairement indisponible");
-      }
       await refresh();
     } catch (exc) {
       setToast(`⛔ Commande impossible : ${exc.message}`);
@@ -854,25 +805,9 @@ export default function App({ readonly = false, secured = false }) {
               {controlBusy ? "Commande en cours…" : flux?.online ? "■ Arrêter le simulateur" : "▶ Démarrer le simulateur"}
             </button>
             <small>{readonly ? "Lecture seule : commande réservée à l'opérateur." : flux?.online
-              ? "Appels, incidents et météo alimentent le journal ci-dessous."
+              ? "Appels, incidents et météo alimentent la simulation."
               : "Rien ne démarre automatiquement. Les premiers appels arrivent après 35 à 90 s."}</small>
           </div>
-
-          <section className="simulation-activity" aria-label="Journal des actions du simulateur">
-            <div className="section-titre">Journal des actions</div>
-            {activityError && <small role="alert" className="notification-error">{activityError}</small>}
-            {!simulationActivity.length && <div className="empty-state">Aucune action pour le moment. Démarrez vous-même le simulateur.</div>}
-            <div className="simulation-activity-list" aria-live="polite">
-              {simulationActivity.map((entry) => (
-                <div className={`simulation-activity-row action-${entry.action.toLowerCase()}`} key={entry.id}>
-                  <time dateTime={entry.at}>{new Date(entry.at).toLocaleTimeString("fr-FR")}</time>
-                  <span><b>{entry.action}</b> · {entry.message}<small>{entry.source}</small></span>
-                </div>
-              ))}
-            </div>
-            {activityHasMore && <button className="simulation-more" onClick={chargerActivitePrecedente}
-              disabled={activityBusy}>{activityBusy ? "Chargement…" : "Afficher les actions précédentes"}</button>}
-          </section>
 
           <div className="flotte-liste">
             {flotte.length === 0 && (
