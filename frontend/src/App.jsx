@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import MapView from "./components/MapView.jsx";
 import ReplayView from "./components/ReplayView.jsx";
+import InfrastructureSearch from "./components/InfrastructureSearch.jsx";
 import { recordIncoming } from "./notificationSound.js";
 import { prioritizeNotifications } from "./notificationPriority.js";
 import {
@@ -159,6 +160,7 @@ export default function App({ readonly = false, secured = false }) {
   const [risque, setRisque] = useState(null);
   const [historique, setHistorique] = useState([]);
   const [cible, setCible] = useState(null);
+  const [searchFocus, setSearchFocus] = useState(null);
   const [modeSimulation, setModeSimulation] = useState(false);
   const [vagues, setVagues] = useState([]);
   const [fantomes, setFantomes] = useState([]);
@@ -516,6 +518,7 @@ export default function App({ readonly = false, secured = false }) {
   };
 
   const gererSelection = (node) => {
+    setSearchFocus(null);
     notificationAnalysisRequest.current += 1;
     setNotificationImpact(null);
     setNotificationImpactError(null);
@@ -526,6 +529,12 @@ export default function App({ readonly = false, secured = false }) {
     setPrediction(null);
     setFantomes([]);
     choisirSource(selection?.sources?.[0]?.event_id);
+  };
+
+  const choisirLieuRecherche = (node) => {
+    gererSelection(node);
+    setSearchFocus({ id: node.id, key: Date.now() });
+    document.getElementById("carte")?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
   const ouvrirRisque = (node) => {
@@ -1218,9 +1227,11 @@ export default function App({ readonly = false, secured = false }) {
       </aside>
 
       <main className="map-zone">
+        <InfrastructureSearch infrastructure={infra} onChoose={choisirLieuRecherche} />
         <MapView
           infra={infra}
           cibleId={cible?.id}
+          searchFocus={searchFocus}
           onSelection={gererSelection}
           vaguesCascades={vagues}
           fantomes={fantomes}

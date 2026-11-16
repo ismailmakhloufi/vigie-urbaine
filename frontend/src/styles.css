@@ -497,6 +497,32 @@ button:disabled { cursor: not-allowed; }
 
 /* ============ CARTE ============ */
 .map-zone { grid-area: map; position: relative; min-width: 0; }
+.infrastructure-search {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  width: min(440px, calc(100% - 110px)); z-index: 900;
+  padding: 9px; background: rgba(9, 13, 20, .95);
+  border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+}
+.infrastructure-search label { display: block; margin-bottom: 5px; color: var(--ink-dim); font: 10px var(--font-mono); }
+.infrastructure-search input {
+  box-sizing: border-box; width: 100%; padding: 9px 10px;
+  color: var(--ink); background: var(--bg-panel); border: 1px solid var(--line);
+  outline: none; font: 12px var(--font-mono);
+}
+.infrastructure-search input:focus { border-color: var(--cyan); }
+.infrastructure-results {
+  max-height: min(320px, 55vh); overflow-y: auto; margin-top: 5px;
+  background: var(--bg-panel); border: 1px solid var(--line);
+}
+.infrastructure-results button {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  width: 100%; padding: 9px; text-align: left; cursor: pointer;
+  color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--line);
+}
+.infrastructure-results button:hover, .infrastructure-results button[aria-selected="true"] { background: rgba(34, 211, 238, .15); }
+.infrastructure-results button span { overflow-wrap: anywhere; }
+.infrastructure-results button small { color: var(--ink-dim); white-space: nowrap; font: 10px var(--font-mono); }
+.infrastructure-no-results { padding: 12px; color: var(--ink-dim); font-size: 11px; }
 #carte { position: absolute; inset: 0; }
 .leaflet-container { background: #04060a !important; font-family: var(--font-head) !important; }
 .leaflet-tile { filter: invert(1) hue-rotate(185deg) brightness(0.68) contrast(1.08) saturate(0.5); }
@@ -835,6 +861,7 @@ button:disabled { cursor: not-allowed; }
   .kpi-horizontal strong { font-size: 20px; }
   .sidebar, .risk-center { max-height: none; overflow: visible; border: 0; }
   .map-zone { min-height: 390px; }
+  .infrastructure-search { width: min(380px, calc(100% - 80px)); }
   .map-overlay-title { left: 50px; }
   .legende { max-height: 112px; overflow-y: auto; }
 }

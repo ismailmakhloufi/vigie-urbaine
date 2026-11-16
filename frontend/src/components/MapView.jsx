@@ -49,6 +49,7 @@ const toLatLngs = (flat) => {
 export default function MapView({
   infra,
   cibleId,
+  searchFocus = null,
   onSelection,
   vaguesCascades = [],
   fantomes = [],
@@ -317,7 +318,8 @@ export default function MapView({
 
       marker.on("click", () => onSelection(node));
     }
-  }, [infra, cibleId, fantomes, riskById, onSelection, itineraires]);
+    if (searchFocus) markers.current[searchFocus.id]?.marker?.openPopup();
+  }, [infra, cibleId, fantomes, riskById, onSelection, itineraires, searchFocus]);
 
   useEffect(() => {
     const layer = coucheChaine.current;
@@ -350,11 +352,28 @@ export default function MapView({
       derniereChaine.current = cle; // garder le lieu de l'alerte au centre, même après l'analyse asynchrone
       return;
     }
-    if (carte.current && cle !== derniereChaine.current) {
+    if (carte.current && !searchFocus && cle !== derniereChaine.current) {
       derniereChaine.current = cle;
       carte.current.fitBounds(pts, { padding: [45, 45], maxZoom: 14, animate: true });
     }
-  }, [infra, chaineRisque, sourceRisqueId, notificationFocus]);
+  }, [infra, chaineRisque, sourceRisqueId, notificationFocus, searchFocus]);
+
+  useEffect(() => {
+    if (!searchFocus || !carte.current) return;
+    const node = infra.find((entry) => entry.id === searchFocus.id);
+    if (node?.lat == null || node?.lon == null) return;
+    const map = carte.current;
+    const showPopup = () => markers.current[node.id]?.marker?.openPopup();
+    map.once("moveend", showPopup);
+    if (node.kind === "Road" && Array.isArray(node.path) && node.path.length >= 4) {
+      const points = toLatLngs(node.path);
+      map.fitBounds(points, { padding: [70, 70], maxZoom: 16, animate: true });
+    } else {
+      map.flyTo([node.lat, node.lon], Math.max(map.getZoom(), 15), { duration: 0.8 });
+    }
+    showPopup();
+    return () => map.off("moveend", showPopup);
+  }, [infra, searchFocus]);
 
   useEffect(() => {
     if (!notificationFocus || !carte.current || lastNotificationFocus.current === notificationFocus.focusKey) return;
