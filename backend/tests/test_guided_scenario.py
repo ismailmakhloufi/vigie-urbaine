@@ -56,6 +56,8 @@ class GuidedScenarioTests(unittest.TestCase):
 
     def graph(self, cypher, params=None):
         if "n.kind = $kind" in cypher:
+            if params["healthy_status"] != ("CLEAR" if params["kind"] == "Road" else "ONLINE"):
+                return []
             return [{"id": "Z1" if params["kind"] == "Zone" else "P1"}]
         if "Hospital:Infrastructure" in cypher:
             return [{"id": "H1"}]

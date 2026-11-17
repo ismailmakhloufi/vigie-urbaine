@@ -25,10 +25,12 @@ def status() -> dict:
 
 
 def _target(kind: str, event_type: str) -> str:
+    healthy_status = "CLEAR" if kind == "Road" else "ONLINE"
     rows = neo4j_client.query(
         "MATCH (n:Infrastructure) WHERE n.kind = $kind "
-        "AND (n.status = 'CLEAR' OR n.status IS NULL) "
-        "RETURN n.id AS id ORDER BY n.id", {"kind": kind},
+        "AND (n.status = $healthy_status OR n.status IS NULL) "
+        "RETURN n.id AS id ORDER BY n.id",
+        {"kind": kind, "healthy_status": healthy_status},
     )
     for row in rows:
         if not mongo_client._db.events.count_documents({
