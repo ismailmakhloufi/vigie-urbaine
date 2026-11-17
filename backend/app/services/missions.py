@@ -140,7 +140,7 @@ def _release_vehicle(doc: dict, status: str = "AVAILABLE"):
 
 
 def _tick_mission(doc: dict) -> dict:
-    """Avance le vehicule, deroute si une route devant lui est bloquee."""
+    """Avance le véhicule et recalcule le trajet si blocage ou bouchon le justifie."""
     if doc["status"] not in ("EN_ROUTE", "DIVERTED"):
         return doc
 
@@ -188,6 +188,22 @@ def _tick_mission(doc: dict) -> dict:
     roads_ahead = route[seg_idx:]
     blocked = _blocked_roads()
     collision = next((rid for rid in roads_ahead if rid in blocked), None)
+    traffic_road = None
+    new_route = None
+
+    if not collision and doc.get("profile") == "AMBULANCE" and len(roads_ahead) > 1:
+        from app.services.traffic import congestion_map
+        congested = congestion_map()
+        traffic_road = next((rid for rid in roads_ahead[1:] if congested.get(rid, 0) >= 2), None)
+        if traffic_road:
+            try:
+                candidate = compute_route(route[seg_idx], doc["destination_id"], doc["profile"])
+                if candidate["route"] != route[seg_idx:]:
+                    new_route = candidate
+                else:
+                    traffic_road = None  # le trajet actuel reste préférable malgré le bouchon
+            except (LookupError, RuntimeError):
+                traffic_road = None
 
     if collision:
         # on tente de repartir d'ou le vehicule se trouve, sinon du prochaine troncon
@@ -196,7 +212,6 @@ def _tick_mission(doc: dict) -> dict:
         nxt = route[min(seg_idx + 1, len(route) - 1)]
         if nxt != current_road:
             attempt_roads.append(nxt)
-        new_route = None
         for cand in attempt_roads:
             if cand in blocked:
                 continue
@@ -224,24 +239,25 @@ def _tick_mission(doc: dict) -> dict:
             _release_vehicle(doc)
             return doc
 
-        remaining_min = int(round(elapsed_min + new_route["estimated_time_min"]))
+    if new_route:
         doc.update({
             "status": "DIVERTED",
             "route": new_route["route"],
             "route_names": new_route["route_names"],
             "avoided": new_route["avoided"],
             "distance_km": new_route["distance_km"],
-            "eta_min": remaining_min,
+            "eta_min": new_route["estimated_time_min"],
             "path": new_route.get("path", []),
             "road_offsets": new_route.get("road_offsets", []),
             "departure_at": now,
             "position": position,
-            "progress": fraction,
+            "progress": 0.0,
         })
         _log(
             doc,
             "REROUTE",
-            f"⚠ {collision} bloquée devant le véhicule : déroutement automatique via "
+            (f"⚠ {collision} bloquée devant le véhicule : " if collision else
+             f"🚑 Embouteillage simulé sur {traffic_road} : ") + "déroutement automatique via "
             + " › ".join(new_route["route_names"]),
         )
         mongo_client.update_mission(doc["mission_id"], {
@@ -255,7 +271,7 @@ def _tick_mission(doc: dict) -> dict:
             "road_offsets": doc["road_offsets"],
             "departure_at": doc["departure_at"],
             "position": position,
-            "progress": fraction,
+            "progress": 0.0,
             "timeline": doc["timeline"],
         })
         return doc

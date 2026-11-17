@@ -67,6 +67,10 @@ export const getCalls = (limit = 8) =>
   apiFetch(`/integration/calls?limit=${limit}`);
 
 export const getStream = () => apiFetch("/integration/stream");
+export const getGuidedScenario = () => apiFetch("/integration/scenario");
+export const postGuidedScenario = (action) => apiFetch("/integration/scenario", {
+  method: "POST", body: JSON.stringify({ action }),
+});
 export const postStreamAction = (action) =>
   apiFetch("/integration/stream", {
     method: "POST",

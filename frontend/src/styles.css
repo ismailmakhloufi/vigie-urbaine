@@ -133,6 +133,19 @@ button:disabled { cursor: not-allowed; }
 .simulation-control button.simulation-stop:hover:not(:disabled) { background: rgba(255, 77, 94, .18); }
 .simulation-control button:disabled { opacity: .5; cursor: not-allowed; }
 .simulation-control small { color: var(--ink-dim); line-height: 1.4; font-size: 10px; }
+.guided-scenario { display: grid; gap: 7px; margin: 10px 0 16px; padding: 10px;
+  border: 1px solid var(--line); background: var(--bg-panel-2); }
+.guided-scenario p, .guided-scenario small { margin: 0; color: var(--ink-dim); font-size: 10px; line-height: 1.4; }
+.guided-scenario .notification-error { color: var(--rouge); }
+.guided-step { padding: 7px 0; border-top: 1px solid var(--line); }
+.guided-step button, .guided-reset { width: 100%; padding: 7px; text-align: left; cursor: pointer;
+  background: transparent; border: 1px solid var(--violet); color: var(--ink); font: 10px var(--font-mono); }
+.guided-step button:hover:not(:disabled), .guided-reset:hover:not(:disabled) { background: rgba(167, 139, 250, .13); }
+.guided-step button:disabled, .guided-reset:disabled { opacity: .55; cursor: default; }
+.guided-step small { display: block; margin-top: 4px; }
+.guided-result { margin-top: 5px; color: var(--cyan); font: 10px var(--font-mono); line-height: 1.4; }
+.guided-result span { display: block; overflow-wrap: anywhere; margin-top: 4px; }
+.guided-reset { border-color: var(--ambre); color: var(--ambre); }
 .map-notification-focus {
   position: absolute; z-index: 1000; left: 50%; top: 70px;
   transform: translateX(-50%); width: min(420px, calc(100% - 32px));

@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 
 from app.services import dispatcher, fleet, missions
 from app.services import sources
-from app.services import source_health, replay, simulation_activity
+from app.services import source_health, replay, simulation_activity, guided_scenario
 from app.services.routing import compute_route_options
 
 
@@ -66,6 +66,10 @@ class ChooseRouteRequest(BaseModel):
 
 class StreamAction(BaseModel):
     action: str = Field(pattern="^(start|stop|pause|resume)$")
+
+
+class GuidedAction(BaseModel):
+    action: str = Field(pattern="^(rain|ambulance|block|power|reset)$")
 
 
 # ----- sources -----
@@ -132,6 +136,19 @@ def activity(limit: int = Query(default=60, ge=1, le=100),
     if bool(before_at) != bool(before_id):
         raise HTTPException(422, "Date et identifiant du curseur requis ensemble")
     return simulation_activity.recent(limit, before_at, before_id)
+
+
+@router.get("/integration/scenario")
+def guided_state():
+    return guided_scenario.status()
+
+
+@router.post("/integration/scenario")
+def guided_action(request: GuidedAction):
+    try:
+        return guided_scenario.run(request.action)
+    except guided_scenario.ScenarioConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 # ----- console -----

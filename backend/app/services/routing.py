@@ -188,7 +188,7 @@ def _access_road(infra_id: str, blocked: set) -> tuple[str | None, float]:
 
     row = rows[0]
     if row["kind"] == "Road":
-        if infra_id in blocked:
+        if infra_id in blocked or row["status"] == "BLOCKED":
             return None, 0.0
         return infra_id, 0.0
 
@@ -215,7 +215,7 @@ def _access_road(infra_id: str, blocked: set) -> tuple[str | None, float]:
 
     best_id, best_min, cached_km = None, float("inf"), 0.0
     for cand in zone_roads:
-        if cand["lat"] is None:
+        if cand["lat"] is None or cand["id"] in blocked:
             continue
         m, km = haversine_min(row["lat"], row["lon"], cand["lat"], cand["lon"])
         if m < best_min:
@@ -231,9 +231,11 @@ def compute_route(
     profile: str = "AMBULANCE",
     mode: str = "FAST",
     corridor: bool = False,
+    extra_blocked: set[str] | None = None,
 ) -> dict:
     roads, edges = _reseau()
     blocked, rainy_zones, notes = _active_dynamic_state()
+    blocked = blocked | (extra_blocked or set())
 
     for rid, meta in roads.items():
         if meta["status"] == "BLOCKED":

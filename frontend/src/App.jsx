@@ -29,6 +29,8 @@ import {
   getFleet,
   getCalls,
   getStream,
+  getGuidedScenario,
+  postGuidedScenario,
   postStreamAction,
   postRouteOptions,
   postCorridor,
@@ -66,6 +68,13 @@ const TYPES_INCIDENT = [
     cibles: ["Hospital", "PowerStation", "TelecomTower", "Warehouse", "Pharmacy"],
     severite: "HIGH",
   },
+];
+
+const GUIDED_STEPS = [
+  { action: "rain", label: "1 · Pluie extrême simulée", detail: "Une zone est exposée ; les sites potentiellement touchés apparaissent sur la carte." },
+  { action: "ambulance", label: "2 · Appel médical et ambulance", detail: "Une mission et son itinéraire sont créés depuis une base disponible." },
+  { action: "block", label: "3 · Route bloquée et embouteillage", detail: "Le trafic des rues voisines augmente ; l'ambulance cherche un détour." },
+  { action: "power", label: "4 · Panne électrique", detail: "Les dépendances du poste touché sont recalculées." },
 ];
 
 const EMOJI_KIND = {
@@ -175,6 +184,9 @@ export default function App({ readonly = false, secured = false }) {
   const [flotte, setFlotte] = useState([]);
   const [appels, setAppels] = useState([]);
   const [flux, setFlux] = useState(null);
+  const [guidedScenario, setGuidedScenario] = useState(null);
+  const [guidedBusy, setGuidedBusy] = useState(false);
+  const [guidedError, setGuidedError] = useState(null);
   const [controlBusy, setControlBusy] = useState(false);
   const [comparateur, setComparateur] = useState(null);
   const soundLedgerFallback = useRef(new Map());
@@ -206,7 +218,7 @@ export default function App({ readonly = false, secured = false }) {
 
   const refresh = async () => {
     try {
-      const [infraData, riskData, missionsData, flotteData, appelsData, fluxData] =
+      const [infraData, riskData, missionsData, flotteData, appelsData, fluxData, guidedData] =
         await Promise.all([
           getInfrastructure(),
           getRisk(),
@@ -214,6 +226,7 @@ export default function App({ readonly = false, secured = false }) {
           getFleet(),
           getCalls(8),
           getStream(),
+          getGuidedScenario().catch(() => null),
         ]);
       setInfra(infraData);
       setRisque(riskData);
@@ -221,6 +234,7 @@ export default function App({ readonly = false, secured = false }) {
       setFlotte(flotteData);
       setAppels(appelsData);
       setFlux(fluxData);
+      if (guidedData) setGuidedScenario(guidedData);
       setErreur(null);
     } catch (exc) {
       setErreur(`Backend injoignable : ${exc.message}`);
@@ -245,6 +259,20 @@ export default function App({ readonly = false, secured = false }) {
       setToast(`⛔ Commande impossible : ${exc.message}`);
     } finally {
       setControlBusy(false);
+    }
+  };
+
+  const avancerParcours = async (action) => {
+    if (guidedBusy || readonly || !flux?.online) return;
+    setGuidedBusy(true);
+    setGuidedError(null);
+    try {
+      setGuidedScenario(await postGuidedScenario(action));
+      await refresh();
+    } catch (exc) {
+      setGuidedError(exc.message);
+    } finally {
+      setGuidedBusy(false);
     }
   };
 
@@ -808,6 +836,33 @@ export default function App({ readonly = false, secured = false }) {
               ? "Appels, incidents et météo alimentent la simulation."
               : "Rien ne démarre automatiquement. Les premiers appels arrivent après 35 à 90 s."}</small>
           </div>
+
+          <section className="guided-scenario" aria-label="Parcours de crise guidé">
+            <div className="section-titre">Parcours de crise guidé</div>
+            <p>Déclenchement uniquement sur vos clics. La pluie du parcours est fictive, pas une mesure météo réelle.</p>
+            {!flux?.online && <small>Démarrez vous-même le simulateur pour activer les étapes.</small>}
+            {guidedError && <small className="notification-error" role="alert">{guidedError}</small>}
+            {GUIDED_STEPS.map((stage, index) => {
+              const result = guidedScenario?.history[index];
+              return <div className="guided-step" key={stage.action}>
+                <button type="button" disabled={readonly || !flux?.online || guidedBusy || (guidedScenario?.step ?? 0) !== index}
+                  onClick={() => avancerParcours(stage.action)}>
+                  {result ? "✓ " : ""}{stage.label}
+                </button>
+                <small>{stage.detail}</small>
+                {result && <div className="guided-result">
+                  {stage.action === "ambulance"
+                    ? `Appel ${result.call_id} · ${result.mission_id ? `mission ${result.mission_id}` : result.call_status}`
+                    : `${result.target_id} · ${result.impact_count} site(s) potentiellement concernés`}
+                  {stage.action === "block" && <span>Trajet : {result.previous_route_names?.join(" › ") || result.previous_route?.join(" › ")} → {result.new_route_names?.join(" › ") || result.new_route?.join(" › ")}. {result.rerouted === false ? "Détour non effectué : vérifiez l’état de la mission. " : ""}{Object.values(result.congestion || {}).filter((level) => level >= 2).length} rue(s) encombrée(s) dans le modèle.</span>}
+                </div>}
+              </div>;
+            })}
+            {(guidedScenario?.step ?? 0) > 0 && <button type="button" className="guided-reset"
+              disabled={readonly || !flux?.online || guidedBusy}
+              onClick={() => avancerParcours("reset")}>Recommencer le parcours</button>}
+            {(guidedScenario?.step ?? 0) > 0 && <small>Recommencer ne résout pas les incidents déjà créés.</small>}
+          </section>
 
           <div className="flotte-liste">
             {flotte.length === 0 && (
