@@ -1245,6 +1245,7 @@ export default function App({ readonly = false, secured = false }) {
           sourceRisqueId={sourceActive?.event_id}
           itineraires={plan?.detours || []}
           missions={missionsActives}
+          featuredMissionId={guidedScenario?.history.find((step) => step.action === "ambulance")?.mission_id}
           options={comparateur?.options || []}
           notificationFocus={notificationFocus}
           notificationImpact={notificationImpact}

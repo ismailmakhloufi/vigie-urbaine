@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { NATURES_FR, PROFILS_FR, NIVEAUX_FR, STATUTS_FR, ETYPES_FR, NIVEAU } from "../libelles.js";
 import { escapeHtml as h } from "../escapeHtml.js";
 import { buildEstimatedFootprint } from "../estimatedFootprint.js";
+import { roadVisible, missionToHighlight, missionRouteVisible } from "../mapVisibility.js";
 
 const COULEURS_STATUT = {
   ONLINE: "#34d399",
@@ -65,6 +66,7 @@ export default function MapView({
   sourceRisqueId,
   itineraires = [],
   missions = [],
+  featuredMissionId = null,
   options = [],
   notificationFocus = null,
   notificationImpact = null,
@@ -85,6 +87,10 @@ export default function MapView({
   const coucheEstimee = useRef(null);
   const derniereChaine = useRef(null);
   const markers = useRef({});
+  const [showRoadNetwork, setShowRoadNetwork] = useState(false);
+  const [showAllMissionRoutes, setShowAllMissionRoutes] = useState(false);
+  const [selectedMissionId, setSelectedMissionId] = useState(null);
+  const focusedMissionId = missionToHighlight(missions, selectedMissionId, featuredMissionId);
   const lastNotificationFocus = useRef(null);
   const liveEstimate = useMemo(() => liveRiskImpacts.length ? { impacts: liveRiskImpacts } : null,
     [liveRiskImpacts]);
@@ -208,12 +214,13 @@ export default function MapView({
         }
         if (pts.length >= 2) {
           const bloquee = node.status && node.status !== "CLEAR";
+          const routeVisible = roadVisible(node, cibleId, showRoadNetwork, replay);
 
-          if (risk && risk.score >= 30) {
+          if (risk && risk.score >= 50) {
             L.polyline(pts, {
               color: riskColor,
-              weight: risk.risk === "CRITICAL" ? 13 : 9,
-              opacity: 0.2,
+              weight: risk.risk === "CRITICAL" ? 9 : 6,
+              opacity: 0.16,
               lineCap: "round",
               lineJoin: "round",
               className: risk.risk === "CRITICAL" ? "risk-map-pulse" : "",
@@ -231,17 +238,19 @@ export default function MapView({
               (node.criticality != null ? `Criticité : ${h(node.criticality)}/5<br>` : "") +
             `</div>`;
 
-          const route = L.polyline(pts, {
-            color: couleur,
-            weight: node.criticality >= 4 ? 5 : 3,
-            opacity: 0.8,
-            lineCap: "round",
-            lineJoin: "round",
-            dashArray: bloquee ? "7 9" : undefined,
-          })
-            .addTo(couche.current)
-            .bindPopup(popupHtml);
-          route.on("click", () => selectNode(node));
+          if (routeVisible) {
+            const route = L.polyline(pts, {
+              color: replay || bloquee || node.id === cibleId ? couleur : "#668a88",
+              weight: replay ? (node.criticality >= 4 ? 5 : 3) : bloquee || node.id === cibleId ? 3 : 1.5,
+              opacity: replay ? 0.8 : bloquee || node.id === cibleId ? 0.85 : 0.35,
+              lineCap: "round",
+              lineJoin: "round",
+              dashArray: bloquee ? "7 9" : undefined,
+            })
+              .addTo(couche.current)
+              .bindPopup(popupHtml);
+            route.on("click", () => selectNode(node));
+          }
 
           const pivot = [
             pts.reduce((s, p) => s + p[0], 0) / pts.length,
@@ -336,7 +345,7 @@ export default function MapView({
       marker.on("click", () => selectNode(node));
     }
     if (searchFocus) markers.current[searchFocus.id]?.marker?.openPopup();
-  }, [infra, cibleId, fantomes, riskById, onSelection, itineraires, searchFocus, whatifById]);
+  }, [infra, cibleId, fantomes, riskById, onSelection, itineraires, searchFocus, whatifById, showRoadNetwork, replay]);
 
   useEffect(() => {
     const layer = coucheChaine.current;
@@ -462,35 +471,38 @@ export default function MapView({
     for (const mission of missions) {
       const path = mission.path || [];
       if (path.length < 4) continue;
+      const highlighted = replay || mission.mission_id === focusedMissionId;
 
       const couleur =
         mission.status === "BLOCKED" ? "#f43f5e" : mission.status === "DIVERTED" ? "#22d3ee" : "#34d399";
 
       const latlngs = toLatLngs(path);
 
-      L.polyline(latlngs, {
-        color: couleur,
-        weight: 11,
-        opacity: 0.13,
-        lineCap: "round",
-      }).addTo(layer);
+      if (missionRouteVisible(mission.mission_id, focusedMissionId, showAllMissionRoutes, replay)) {
+        if (highlighted) L.polyline(latlngs, {
+          color: couleur,
+          weight: 9,
+          opacity: 0.12,
+          lineCap: "round",
+        }).addTo(layer);
 
-      L.polyline(latlngs, {
-        color: couleur,
-        weight: 3,
-        opacity: 0.85,
-        dashArray: mission.status === "DIVERTED" ? "8 7" : null,
-        lineCap: "round",
-      })
-        .addTo(layer)
-        .bindPopup(
-          `<div class="map-popup">` +
-            `<b>${mission.corridor_active ? "🚨 " : ""}Mission ${h(mission.mission_id)} · ${h(PROFILS_FR[mission.profile] || mission.profile)}</b><br>` +
-            `${mission.vehicle ? `Véhicule <b>${h(mission.vehicle)}</b> · ` : ""}` +
-            `${h(mission.origin_name)} → ${h(mission.destination_name)}<br>` +
-            `${h((Number(mission.progress || 0) * 100).toFixed(0))}% · arrivée dans ${h(mission.remaining_min)} min` +
-          `</div>`
-        );
+        L.polyline(latlngs, {
+          color: highlighted ? couleur : "#82939c",
+          weight: highlighted ? 3.5 : 1.5,
+          opacity: highlighted ? 0.95 : 0.3,
+          dashArray: mission.status === "DIVERTED" ? "8 7" : null,
+          lineCap: "round",
+        })
+          .addTo(layer)
+          .bindPopup(
+            `<div class="map-popup">` +
+              `<b>${mission.corridor_active ? "🚨 " : ""}Mission ${h(mission.mission_id)} · ${h(PROFILS_FR[mission.profile] || mission.profile)}</b><br>` +
+              `${mission.vehicle ? `Véhicule <b>${h(mission.vehicle)}</b> · ` : ""}` +
+              `${h(mission.origin_name)} → ${h(mission.destination_name)}<br>` +
+              `${h((Number(mission.progress || 0) * 100).toFixed(0))}% · arrivée dans ${h(mission.remaining_min)} min` +
+            `</div>`
+          );
+      }
 
       const [lat, lon] = mission.position || [];
       if (lat != null && lon != null) {
@@ -506,7 +518,7 @@ export default function MapView({
         }).addTo(layer);
       }
     }
-  }, [missions]);
+  }, [missions, focusedMissionId, showAllMissionRoutes, replay]);
 
   // ----- les 3 variantes du comparateur (FAST / SHORT / SAFE) -----
   useEffect(() => {
@@ -608,6 +620,20 @@ export default function MapView({
          <small>{replay ? "ARCHIVE OBSERVÉE // PAS EN DIRECT" : "JUMEAU NUMÉRIQUE EN DIRECT"}</small>
         <b>Grand Tunis</b>
       </div>
+      {!replay && <div className="map-visibility" role="group" aria-label="Lisibilité de la carte">
+        <label><input type="checkbox" checked={showRoadNetwork}
+          onChange={(event) => setShowRoadNetwork(event.target.checked)} /> Routes de fond</label>
+        {missions.length > 1 && <>
+          <label><input type="checkbox" checked={showAllMissionRoutes}
+            onChange={(event) => setShowAllMissionRoutes(event.target.checked)} /> Tous les trajets</label>
+          <select aria-label="Mission mise en évidence" value={focusedMissionId || ""}
+            onChange={(event) => setSelectedMissionId(event.target.value)}>
+            {missions.map((mission) => <option key={mission.mission_id} value={mission.mission_id}>
+              {mission.vehicle || mission.mission_id} · {mission.mission_id}
+            </option>)}
+          </select>
+        </>}
+      </div>}
 
       <div className="legende">
         <div className="legende-titre">Risque calculé</div>

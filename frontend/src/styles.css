@@ -560,6 +560,15 @@ button:disabled { cursor: not-allowed; }
   font: 7.5px var(--font-mono); letter-spacing: 2.2px;
 }
 .map-overlay-title b { font-size: 14px; letter-spacing: 1px; }
+.map-visibility { position: absolute; z-index: 900; top: 65px; left: 12px;
+  display: grid; gap: 6px; max-width: 190px; padding: 8px;
+  color: var(--ink); background: rgba(6, 9, 14, .92); border: 1px solid var(--line);
+  font: 10px var(--font-mono); }
+.map-visibility label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.map-visibility input { accent-color: var(--cyan); margin: 0; }
+.map-visibility select { width: 100%; min-width: 0; padding: 4px;
+  color: var(--ink); background: var(--bg-panel); border: 1px solid var(--line);
+  font: 10px var(--font-mono); }
 
 .legende {
   position: absolute; z-index: 900; right: 12px; bottom: 12px;
@@ -867,6 +876,7 @@ button:disabled { cursor: not-allowed; }
   .map-zone { min-height: 390px; }
   .infrastructure-search { width: min(380px, calc(100% - 80px)); }
   .map-overlay-title { left: 50px; }
+  .map-visibility { top: 60px; max-width: 150px; }
   .legende { max-height: 112px; overflow-y: auto; }
 }
 
