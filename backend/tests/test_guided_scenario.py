@@ -74,15 +74,22 @@ class GuidedScenarioTests(unittest.TestCase):
         self.db.events.insert_one({"type": payload.type, "target_id": payload.target_id,
                                    "status": "ACTIVE", "payload": payload.payload,
                                    "description": payload.description})
-        return {"id": ident, "impact": SimpleNamespace(total_count=3)}
+        example = SimpleNamespace(id="H1", name="Hôpital H1", risk="HIGH", score=72,
+                                  depth=2, reasons=["Dépendance du graphe"],
+                                  chain=[{"id": payload.target_id, "name": "Cible"},
+                                         {"id": "H1", "name": "Hôpital H1"}])
+        return {"id": ident, "target": {"name": "Cible"},
+                "impact": SimpleNamespace(total_count=3, max_depth=2, impacts=[example])}
 
     def call(self, kind, destination, note):
         self.db.calls.insert_one({"call_id": "A-1", "mission_id": "M-1", "status": "DISPATCHED"})
         self.db.missions.insert_one({"mission_id": "M-1", "destination_id": destination,
              "profile": "AMBULANCE", "status": "EN_ROUTE", "route": ORIGINAL.copy(),
              "route_names": ORIGINAL.copy(), "road_offsets": route(ORIGINAL)["road_offsets"],
-             "progress": 0, "vehicle": "SAMU-1"})
-        return {"call_id": "A-1", "mission_id": "M-1", "status": "DISPATCHED"}
+             "progress": 0, "vehicle": "SAMU-1", "eta_min": 20,
+             "origin_name": "Base", "destination_name": "Hôpital"})
+        return {"call_id": "A-1", "mission_id": "M-1", "status": "DISPATCHED",
+                "assigned_vehicle": "SAMU-1"}
 
     def tick(self, doc):
         self.tick_count += 1
@@ -114,15 +121,24 @@ class GuidedScenarioTests(unittest.TestCase):
         self.online = True
         self.assertEqual(self.post("block").status_code, 409)
         self.assertEqual(self.post("rain").json()["step"], 1)
+        rain = self.client.get("/integration/scenario").json()["history"][0]
+        self.assertEqual(rain["impact_examples"][0]["reasons"], ["Dépendance du graphe"])
+        self.assertEqual(rain["impact_examples"][0]["chain"][-1]["id"], "H1")
         self.assertEqual(self.post("rain").status_code, 409)
         self.assertIn("pas une mesure Open-Meteo", self.db.events.find_one({"type": "HEAVY_RAIN"})["description"])
-        self.assertEqual(self.post("ambulance").json()["step"], 2)
+        ambulance = self.post("ambulance").json()
+        self.assertEqual(ambulance["step"], 2)
+        self.assertEqual(ambulance["history"][1]["initial_route"], ORIGINAL)
+        self.assertEqual(ambulance["history"][1]["initial_eta_min"], 20)
+        self.assertEqual(ambulance["history"][1]["vehicle"], "SAMU-1")
         result = self.post("block")
         self.assertEqual(result.status_code, 200, result.text)
         self.assertEqual(result.json()["history"][2]["previous_route"], ORIGINAL)
         self.assertEqual(result.json()["history"][2]["new_route"], DETOUR)
         self.assertTrue(result.json()["history"][2]["rerouted"])
         self.assertEqual(result.json()["history"][2]["congestion"], {"R5": 2})
+        self.assertEqual(result.json()["history"][2]["previous_eta_min"], 20)
+        self.assertEqual(result.json()["history"][2]["new_eta_min"], 20)
         self.assertEqual(self.db.events.find_one({"type": "ROAD_BLOCKED"})["target_id"], "R2")
         self.assertEqual(self.post("power").json()["step"], 4)
         self.assertEqual(self.post("power").status_code, 409)

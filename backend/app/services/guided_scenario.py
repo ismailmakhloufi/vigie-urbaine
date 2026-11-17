@@ -47,8 +47,20 @@ def _incident(event_type: str, target_id: str, description: str) -> dict:
         auto_resolve_at=datetime.now(timezone.utc) + timedelta(minutes=10),
     ))
     sources._register(result["id"])
-    return {"event_id": result["id"], "target_id": target_id,
-            "impact_count": result["impact"].total_count}
+    impact = result["impact"]
+    return {
+        "event_id": result["id"], "target_id": target_id,
+        "target_name": result["target"].get("name"),
+        "impact_count": impact.total_count, "max_depth": impact.max_depth,
+        # Snapshot borné : les conséquences affichées restent celles du clic,
+        # même si le flux automatique modifie la ville ensuite.
+        "impact_examples": [
+            {"id": node.id, "name": node.name, "risk": node.risk,
+             "score": node.score, "depth": node.depth,
+             "reasons": node.reasons[:2], "chain": node.chain}
+            for node in impact.impacts[:4]
+        ],
+    }
 
 
 def _rain() -> dict:
@@ -82,9 +94,15 @@ def _ambulance() -> dict:
     if not destination:
         raise ScenarioConflict("Aucun trajet médical praticable avec plusieurs tronçons.")
     call = dispatcher.create_call("MEDICAL", destination, "Urgence fictive du scénario guidé")
+    mission = mongo_client.get_mission(call["mission_id"]) if call.get("mission_id") else None
     return {"action": "ambulance", "call_id": call["call_id"],
             "mission_id": call.get("mission_id"), "destination_id": destination,
-            "call_status": call["status"]}
+            "call_status": call["status"], "vehicle": call.get("assigned_vehicle"),
+            "origin_name": mission.get("origin_name") if mission else None,
+            "destination_name": mission.get("destination_name") if mission else None,
+            "initial_route": mission.get("route") if mission else [],
+            "initial_route_names": mission.get("route_names") if mission else [],
+            "initial_eta_min": mission.get("eta_min") if mission else None}
 
 
 def _block(history: list[dict]) -> dict:
@@ -100,6 +118,7 @@ def _block(history: list[dict]) -> dict:
         raise ScenarioConflict("L'ambulance est déjà arrivée ou immobilisée ; aucun blocage n'a été créé.")
     route = doc["route"]
     old_names = list(doc.get("route_names", []))
+    old_eta = doc.get("eta_min")
     offsets = doc.get("road_offsets") or []
     distance = offsets[-1]["end_km"] if offsets else 0
     traveled = doc.get("progress", 0) * distance
@@ -128,7 +147,9 @@ def _block(history: list[dict]) -> dict:
     updated = mongo_client.get_mission(mission_id) or doc
     return {"action": "block", **incident, "mission_id": mission_id,
             "previous_route": route, "previous_route_names": old_names,
+            "previous_eta_min": old_eta,
             "new_route": updated["route"], "new_route_names": updated.get("route_names", []),
+            "new_eta_min": updated.get("eta_min"),
             "mission_status": updated["status"], "rerouted": updated["route"] != route,
             "congestion": congestion_map()}
 

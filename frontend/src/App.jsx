@@ -145,6 +145,47 @@ function ScenarioCompare({ scenario }) {
   );
 }
 
+function GuidedReasoning({ stage, result, onFocus }) {
+  const incident = stage !== "ambulance";
+  const congestion = Object.entries(result.congestion || {})
+    .filter(([, bump]) => bump >= 2)
+    .sort((a, b) => b[1] - a[1]);
+  const before = result.previous_route_names?.length ? result.previous_route_names : result.previous_route;
+  const after = result.new_route_names?.length ? result.new_route_names : result.new_route;
+  const initial = result.initial_route_names?.length ? result.initial_route_names : result.initial_route;
+
+  return <div className="guided-reasoning">
+    <div><b>1 · Fait enregistré</b>
+      {incident ? <p>{stage === "rain" ? "Pluie extrême fictive" : stage === "block" ? "Route bloquée simulée" : "Panne électrique simulée"} : {result.target_name || result.target_id} ({result.target_id}). {stage === "rain" && "Pas une mesure Open-Meteo."}</p>
+        : <p>Appel médical {result.call_id} vers {result.destination_name || result.destination_id} · {result.call_status}.</p>}
+    </div>
+    <div><b>2 · Raisonnement de l’application</b>
+      {incident ? <>
+        <p>{result.impact_count} site(s) potentiellement concerné(s) selon le graphe de dépendances ; profondeur maximale {result.max_depth ?? "—"} lien(s). Ce ne sont pas des dégâts observés.</p>
+        {result.impact_examples?.length ? <ul>{result.impact_examples.map((site) => <li key={site.id}>
+          <strong>{site.name} ({site.id}) · risque {NIVEAU(site.risk)} · {site.score}/100</strong>
+          {site.chain?.length > 0 && <span>Chaîne : {site.chain.map((node) => node.name || node.id).join(" → ")}</span>}
+          {site.reasons?.length > 0 && <span>Pourquoi : {site.reasons.join(" · ")}</span>}
+        </li>)}</ul> : <small>{result.impact_examples ? "Aucune dépendance trouvée pour cet incident." : "Détail des impacts indisponible pour cette étape antérieure."}</small>}
+      </> : result.mission_id ? <>
+        <p>{result.vehicle || "Ambulance"} disponible : départ de {result.origin_name || "sa base"} vers {result.destination_name || result.destination_id}. Itinéraire initial calculé avec l’état du réseau au moment de l’appel.</p>
+        <p>Trajet initial : {initial?.join(" › ") || "non disponible"} · ETA initiale {result.initial_eta_min ?? "—"} min simulées.</p>
+      </> : <p>Appel en attente : aucune ambulance ni itinéraire ne sont encore attribués. L’étape suivante attend une mission en route.</p>}
+      {stage === "block" && <>
+        <p>Trafic majoré sur {congestion.length} rue(s) voisine(s) dans le modèle{congestion.length ? ` : ${congestion.slice(0, 5).map(([id]) => id).join(", ")}` : ""}. Il ne s’agit pas d’une mesure de circulation réelle.</p>
+        <p>Avant : {before?.join(" › ") || "—"} · durée calculée {result.previous_eta_min ?? "—"} min simulées.</p>
+        <p>Après : {after?.join(" › ") || "—"} · durée calculée {result.new_eta_min ?? "—"} min simulées.</p>
+      </>}
+    </div>
+    <div><b>3 · Résultat visible</b>
+      <p>{stage === "block" ? (result.rerouted ? "Ambulance déroutée : le nouveau trajet remplace l’ancien sur la carte." : "Détour non effectué : consultez l’état de la mission.")
+        : stage === "ambulance" ? (result.mission_id ? "Mission et tracé affichés sur la carte tant que le véhicule circule." : "Appel affiché au standard ; aucun trajet inventé.")
+          : "L’incident et les risques calculés apparaissent dans l’état actuel de la ville."}</p>
+    </div>
+    {onFocus && <button type="button" className="guided-focus" onClick={onFocus}>⌖ Voir la cible sur la carte</button>}
+  </div>;
+}
+
 export default function App({ readonly = false, secured = false }) {
   const [infra, setInfra] = useState([]);
   const [risque, setRisque] = useState(null);
@@ -187,6 +228,7 @@ export default function App({ readonly = false, secured = false }) {
   const [guidedScenario, setGuidedScenario] = useState(null);
   const [guidedBusy, setGuidedBusy] = useState(false);
   const [guidedError, setGuidedError] = useState(null);
+  const [guidedDetails, setGuidedDetails] = useState(null);
   const [controlBusy, setControlBusy] = useState(false);
   const [comparateur, setComparateur] = useState(null);
   const soundLedgerFallback = useRef(new Map());
@@ -268,6 +310,7 @@ export default function App({ readonly = false, secured = false }) {
     setGuidedError(null);
     try {
       setGuidedScenario(await postGuidedScenario(action));
+      setGuidedDetails(action === "reset" ? -1 : GUIDED_STEPS.findIndex((stage) => stage.action === action));
       await refresh();
     } catch (exc) {
       setGuidedError(exc.message);
@@ -839,7 +882,8 @@ export default function App({ readonly = false, secured = false }) {
 
           <section className="guided-scenario" aria-label="Parcours de crise guidé">
             <div className="section-titre">Parcours de crise guidé</div>
-            <p>Déclenchement uniquement sur vos clics. La pluie du parcours est fictive, pas une mesure météo réelle.</p>
+            <p>Déclenchement uniquement sur vos clics. Le flux automatique continue en parallèle ; les résultats ci-dessous correspondent uniquement à ce parcours.</p>
+            <p>La pluie du parcours est fictive, pas une mesure météo réelle.</p>
             {!flux?.online && <small>Démarrez vous-même le simulateur pour activer les étapes.</small>}
             {guidedError && <small className="notification-error" role="alert">{guidedError}</small>}
             {GUIDED_STEPS.map((stage, index) => {
@@ -854,7 +898,17 @@ export default function App({ readonly = false, secured = false }) {
                   {stage.action === "ambulance"
                     ? `Appel ${result.call_id} · ${result.mission_id ? `mission ${result.mission_id}` : result.call_status}`
                     : `${result.target_id} · ${result.impact_count} site(s) potentiellement concernés`}
-                  {stage.action === "block" && <span>Trajet : {result.previous_route_names?.join(" › ") || result.previous_route?.join(" › ")} → {result.new_route_names?.join(" › ") || result.new_route?.join(" › ")}. {result.rerouted === false ? "Détour non effectué : vérifiez l’état de la mission. " : ""}{Object.values(result.congestion || {}).filter((level) => level >= 2).length} rue(s) encombrée(s) dans le modèle.</span>}
+                  <button type="button" className="guided-explain-toggle"
+                    aria-expanded={(guidedDetails ?? (guidedScenario.step - 1)) === index}
+                    onClick={() => setGuidedDetails((current) => (current ?? (guidedScenario.step - 1)) === index ? -1 : index)}>
+                    {(guidedDetails ?? (guidedScenario.step - 1)) === index ? "Masquer" : "Voir"} le raisonnement
+                  </button>
+                  {(guidedDetails ?? (guidedScenario.step - 1)) === index && <GuidedReasoning stage={stage.action} result={result}
+                    onFocus={infra.some((node) => node.id === (result.target_id || result.destination_id))
+                      ? () => {
+                        choisirLieuRecherche(infra.find((node) => node.id === (result.target_id || result.destination_id)));
+                        if (result.event_id) choisirSource(result.event_id);
+                      } : null} />}
                 </div>}
               </div>;
             })}
