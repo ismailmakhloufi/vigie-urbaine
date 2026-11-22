@@ -1,34 +1,28 @@
-/* ============================================================
-   VIGIE URBAINE — Console de commandement tactique
-   Identité : charbon + ambre de crise, coins coupés, bandes danger
-   ============================================================ */
+/* Vigie Urbaine — fond ardoise, accent sarcelle, ambre de vigilance et rouge d'urgence. */
 
 :root {
-  --bg: #05070a;
-  --bg-panel: #0a0f16;
-  --bg-panel-2: #10161f;
-  --bg-panel-3: #0d1219;
-  --ink: #f2ede2;
-  --ink-dim: #a4adbe;
-  --line: #2b3544;
-  --ambre: #ffb020;
-  --ambre-doux: #ffd08a;
-  --cyan: #38d4e8;
-  --magenta: #f472b6;
-  --rouge: #ff4d5e;
-  --vert: #3ddc97;
-  --violet: #a78bfa;
-  --font-head: "Rajdhani", sans-serif;
+  --bg: #0e171d;
+  --bg-panel: #142129;
+  --bg-panel-2: #1b2a33;
+  --bg-panel-3: #17252e;
+  --ink: #edf2f1;
+  --ink-dim: #a9b9bf;
+  --line: #344852;
+  --ambre: #d4ab70;
+  --ambre-doux: #dfbf91;
+  --cyan: #83c2bf;
+  --magenta: #d4ab70;
+  --rouge: #db8580;
+  --vert: #83c2bf;
+  --violet: #83c2bf;
+  --font-head: "IBM Plex Sans", sans-serif;
   --font-mono: "IBM Plex Mono", monospace;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; }
 body {
-  background:
-    radial-gradient(ellipse 90% 60% at 70% -10%, rgba(255, 176, 32, 0.045), transparent 60%),
-    radial-gradient(ellipse 80% 55% at 10% 110%, rgba(56, 212, 232, 0.035), transparent 60%),
-    var(--bg);
+  background: var(--bg);
   color: var(--ink);
   font-family: var(--font-head);
   overflow: hidden;
@@ -89,7 +83,6 @@ button:disabled { cursor: not-allowed; }
 .notification-entry:hover { background: rgba(255, 176, 32, .2); }
 .notification-panel { border-top: 1px solid var(--line); padding-top: 8px; }
 .notification-panel > p { color: var(--ink-dim); font-size: 10px; margin: 5px 0 10px; }
-.notification-panel .priority-method { color: var(--cyan); line-height: 1.4; }
 .priority-limit { display: block; margin: 8px 0; color: var(--ambre); font-size: 10px; }
 .notification-priority { display: grid; gap: 3px; border-top: 1px dashed var(--line); padding-top: 5px; }
 .notification-priority b { color: var(--cyan); font: 10px var(--font-mono); }
@@ -584,14 +577,14 @@ button:disabled { cursor: not-allowed; }
 }
 .legend-gap { margin-top: 5px; }
 .puce { width: 9px; height: 9px; display: inline-block; transform: rotate(45deg); }
-.risk-low-dot { background: var(--cyan); }
-.risk-medium-dot { background: #facc15; }
+.risk-low-dot { background: var(--ink-dim); }
+.risk-medium-dot { background: var(--ambre); }
 .risk-high-dot { background: var(--ambre); }
 .risk-critical-dot { background: var(--rouge); }
 .status-ok-dot { background: var(--vert); }
 .status-down-dot { background: var(--rouge); }
 .status-cyber-dot { background: var(--magenta); }
-.whatif-dot { border: 2px dashed var(--violet); background: transparent; }
+.whatif-dot { border: 2px dashed var(--cyan); background: transparent; }
 .chaine-dot { background: var(--ambre); box-shadow: 0 0 6px var(--ambre); }
 
 /* --- épingle de nœud --- */
@@ -1139,4 +1132,177 @@ button:disabled { cursor: not-allowed; }
 @keyframes sirene-clignote {
   0%, 100% { box-shadow: 0 0 4px 1px rgba(255, 77, 94, 0.55); }
   50% { box-shadow: 0 0 16px 6px rgba(255, 176, 32, 0.85); }
+}
+
+/* ============ PRÉSENTATION SOBRE ============ */
+@media (min-width: 1101px) {
+  .app-v2 { grid-template-columns: clamp(315px, 24vw, 370px) minmax(380px, 1fr) clamp(315px, 23vw, 350px); }
+}
+.header { gap: 12px; background: var(--bg-panel); padding-inline: 20px; }
+.titre h1 { font-size: 19px; font-weight: 700; letter-spacing: .4px; text-transform: none; }
+.titre h1 span { color: var(--cyan); }
+.titre p { font-size: 10px; letter-spacing: .2px; }
+.replay-entry, .notification-entry { border: 1px solid var(--line); background: var(--bg-panel-2);
+  color: var(--ink); border-radius: 6px; }
+.replay-entry:hover, .notification-entry:hover { border-color: var(--cyan); background: var(--bg-panel-2); }
+.city-status { border-radius: 6px; clip-path: none; }
+.city-status strong { font-size: 12px; }
+.status-stable strong { color: var(--cyan); }
+.status-watch strong, .status-degraded strong { color: var(--ambre); }
+.horloge b { color: var(--ink); font-size: 14px; }
+.kpi-strip { gap: 8px; padding: 8px 14px; background: var(--bg); }
+.kpi-horizontal { border-radius: 7px; clip-path: none; padding: 8px 12px; background: var(--bg-panel); box-shadow: none; }
+.kpi-horizontal::before { width: 2px; border-radius: 7px 0 0 7px; opacity: .6; }
+.kpi-horizontal:hover, .kpi-horizontal:focus-visible { transform: none; box-shadow: none; border-color: var(--cyan); }
+.kpi-horizontal span { letter-spacing: .3px; font-size: 10px; }
+.kpi-horizontal strong { font-size: 22px; color: var(--ink); }
+.kpi-rouge { color: var(--rouge); } .kpi-ambre { color: var(--ambre); }
+.kpi-violet, .kpi-cyan { color: var(--cyan); }
+.sidebar, .risk-center { padding: 14px; background: var(--bg); }
+.sidebar, .risk-center { font-size: 12px; line-height: 1.45; }
+.control-panel, .risk-center { display: flex; flex-direction: column; gap: 12px; }
+.control-panel > section, .risk-center > section, .risk-center > .risk-hint {
+  margin: 0; min-width: 0; padding: 14px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--bg-panel);
+}
+.control-panel > .simulation-panel { order: 0; }
+.control-panel > .missions-panel { order: 1; }
+.control-panel > .active-incidents { order: 2; }
+.control-panel > .dispatcher-panel { order: 3; }
+.control-panel > .notification-panel { order: 4; }
+.control-panel > .target-panel { order: 5; }
+.control-panel > .manual-incidents-panel { order: 6; }
+.control-panel > .whatif-toggle-panel { order: 7; }
+.control-panel > .whatif-card { order: 8; }
+.control-panel > .audit-panel { order: 9; }
+.risk-center > .risk-center-header { order: 0; }
+.risk-center > .risk-list-wrap { order: 1; }
+.risk-center > .risk-focus, .risk-center > .risk-hint { order: 2; }
+.risk-center > .decision-panel { order: 3; }
+.section-titre { color: var(--ink); font-size: 12px; letter-spacing: .25px; text-transform: none; margin-bottom: 10px; }
+.section-titre::before { width: 3px; height: 13px; transform: none; border-radius: 3px;
+  background: var(--cyan); box-shadow: none; }
+.section-titre::after { background: var(--line); }
+.flux-chip, .cible, .guided-scenario, .incident-card, .flotte-row, .mission-card,
+.whatif-card, .risk-row, .risk-preview-button, .btn, .btn-mission, .toast {
+  clip-path: none; border-radius: 6px;
+}
+.flux-chip { background: var(--bg-panel-2); border: 1px solid var(--line); border-left: 3px solid var(--cyan); }
+.flux-info b { color: var(--ink); }
+.flux-dot { background: var(--cyan); animation: none; border-radius: 50%; }
+.flux-chip.flux-pause { border-left-color: var(--ambre); }
+.simulation-control { margin: 10px 0; }
+.simulation-control button { background: var(--cyan); color: var(--bg); border-color: var(--cyan); border-radius: 6px; }
+.simulation-control button:hover:not(:disabled) { background: #a7d4d1; }
+.simulation-control button.simulation-stop { background: transparent; color: var(--rouge); border-color: var(--rouge); }
+.guided-scenario { border-color: var(--line); background: var(--bg-panel-2); margin: 12px 0 0; padding: 12px; }
+.guided-scenario p, .guided-step small { font-size: 10.5px; }
+.guided-step button, .guided-reset, .guided-step button.guided-explain-toggle { border-color: var(--line); color: var(--ink); border-radius: 5px; }
+.guided-step button:hover:not(:disabled), .guided-reset:hover:not(:disabled) { border-color: var(--cyan); background: rgba(131,194,191,.09); }
+.guided-step button:not(:disabled) { border-color: var(--cyan); }
+.guided-reasoning { border-left-color: var(--cyan); background: var(--bg-panel); }
+.guided-reasoning b, .guided-result { color: var(--cyan); }
+.cible, .incident-card { background: var(--bg-panel-2); border-color: var(--line); }
+.cible { padding: 12px; }
+.target-title b { color: var(--ink); }
+.btn { background: var(--bg-panel-2); color: var(--ink); border-color: var(--line); }
+.btn-pluie, .btn-panne, .btn-route, .btn-cyber { color: var(--ink); border-color: var(--line); }
+.btn:hover:not(:disabled) { transform: none; filter: none; border-color: var(--cyan); background: var(--bg-panel-3); }
+.btn:disabled { opacity: .45; }
+.basculer-whatif, .whatif-card, .comparateur { background: var(--bg-panel-2); border-color: var(--line); border-radius: 6px; }
+.basculer-whatif .nom, .whatif-summary strong { color: var(--cyan); }
+.basculer-whatif:hover { background: var(--bg-panel-3); }
+.interrupteur.on { background: var(--cyan); }
+.notification-card, .flotte-row, .appel-row, .mission-card, .risk-row { background: var(--bg-panel-2); border-color: var(--line); }
+.notification-card:hover, .risk-row:hover { background: var(--bg-panel-3); border-color: var(--cyan); }
+.method-details { margin: 7px 0 10px; color: var(--ink-dim); font-size: 10.5px; }
+.method-details summary { cursor: pointer; color: var(--cyan); }
+.method-details p { margin-top: 7px; line-height: 1.5; }
+.notification-card, .incident-card { border-left-color: var(--ambre); }
+.notification-card.n-critical { border-left-color: var(--rouge); }
+.notification-card.n-low { border-left-color: var(--line); }
+.notification-heading, .incident-head { color: var(--ink-dim); }
+.incident-card button { border-color: var(--line); color: var(--ink); border-radius: 5px; clip-path: none; }
+.incident-card button:hover { border-color: var(--cyan); background: var(--bg-panel-3); }
+.mission-card { border-left-color: var(--cyan); }
+.mission-card:has(.m-diverted) { border-left-color: var(--ambre); }
+.mission-card:has(.m-blocked) { border-left-color: var(--rouge); }
+.mission-route, .comp-routes, .journal-row small { color: var(--ink-dim); }
+.btn-mission { color: var(--ink); border-color: var(--line); background: var(--bg-panel-3); }
+.btn-mission:hover:not(:disabled) { border-color: var(--cyan); background: var(--bg-panel-2); }
+.risk-row { clip-path: none; }
+.risk-row.selected { border-color: var(--cyan); background: var(--bg-panel-3); }
+.risk-badge { border-radius: 4px; }
+.risk-low { color: var(--ink-dim); background: var(--bg-panel-3); }
+.risk-medium, .risk-high { color: var(--ambre); background: rgba(212,171,112,.12); }
+.risk-critical { color: var(--rouge); background: rgba(219,133,128,.13); }
+.risk-meter { background: var(--line); }
+.risk-meter i { background: var(--ambre); }
+.risk-preview-button { clip-path: none; color: var(--cyan); border-color: var(--cyan); background: transparent; }
+.risk-preview-button:hover:not(:disabled) { background: rgba(131,194,191,.1); }
+.risk-focus { scroll-margin-top: 18px; }
+.risk-list-wrap, .active-incidents, .notification-panel { scroll-margin-top: 18px; }
+.risk-center-header { padding: 0 2px 4px; }
+.risk-center-header h2 { color: var(--ink); }
+.risk-center-header small { color: var(--ink-dim); letter-spacing: .8px; }
+.risk-center-header > span { border-radius: 5px; }
+.risk-center > .decision-panel, .risk-center > .risk-focus { background: var(--bg-panel); border: 1px solid var(--line); }
+.decision-row:hover, .decision-row.actif, .decision-row:focus-visible,
+.risk-source:hover, .risk-source:focus-visible, .risk-source.actif {
+  border-color: var(--cyan); background: var(--bg-panel-2);
+}
+.risk-source { background: var(--bg-panel-2); }
+.risk-score-large { color: var(--ink); text-shadow: none; }
+.risk-projection { background: var(--bg-panel-2); border-color: var(--line); border-radius: 6px; }
+.risk-chain li { background: var(--bg-panel-2); border-color: var(--line); border-radius: 4px; }
+.risk-reasons li { border-left-color: var(--cyan); background: var(--bg-panel-2); }
+.decision-comparison-card { border-radius: 5px; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { border-color: var(--line) !important; }
+.leaflet-popup-content-wrapper { border-radius: 6px !important; }
+.risk-score { color: var(--ink); }
+.risk-center .decision-panel p, .risk-method, .guided-scenario p { line-height: 1.55; }
+.comparateur-row { border-color: var(--line); }
+.v-fast .comp-label, .v-fast button { color: var(--cyan); border-color: var(--line); }
+.v-short .comp-label, .v-short button { color: var(--ink-dim); border-color: var(--line); }
+.v-safe .comp-label, .v-safe button { color: var(--ambre); border-color: var(--line); }
+.flotte-row, .appel-row, .notification-card, .risk-row { padding-block: 9px; }
+.notification-filters button.actif { border-color: var(--cyan); color: var(--cyan); background: rgba(131,194,191,.08); }
+.notification-priority b, .appel-row b { color: var(--ink); }
+.notification-priority.priority-p1 b { color: var(--rouge); }
+.notification-priority.priority-p2 b { color: var(--ambre); }
+.map-estimate-overview small { color: var(--ink-dim); }
+.leaflet-tile { filter: invert(1) hue-rotate(185deg) brightness(.78) contrast(1.03) saturate(.38); }
+.map-overlay-title, .map-visibility, .legende, .map-estimate-overview {
+  border-radius: 6px; background: rgba(20,33,41,.95); backdrop-filter: blur(6px);
+}
+.map-overlay-title { border: 1px solid var(--line); border-left: 3px solid var(--cyan); }
+.map-overlay-title small { color: var(--ink-dim); letter-spacing: .8px; }
+.legende { border-top-color: var(--line); }
+.map-estimate-overview { border-color: var(--line); }
+.map-estimate-overview b { color: var(--ink); }
+.map-estimate-overview button { border-color: var(--cyan); color: var(--cyan); }
+.toast { box-shadow: 0 12px 30px #0006; }
+@media (max-width: 1100px) {
+  .sidebar, .risk-center { overflow: visible; }
+  .app-v2 { gap: 0; }
+}
+@media (min-width: 701px) and (max-width: 1100px) {
+  .app-v2 {
+    grid-template-columns: minmax(290px, 35%) minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(500px, calc(100vh - 130px)) auto;
+    grid-template-areas: "header header" "kpis kpis" "sidebar map" "risk risk";
+  }
+  .sidebar { min-height: 0; overflow-y: auto; }
+  .map-zone { min-height: 0; }
+  .risk-center { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; overflow: visible; }
+  .risk-center-header, .risk-center > .decision-panel { grid-column: 1 / -1; }
+  .risk-center > .risk-list-wrap { grid-column: 1; }
+  .risk-center > .risk-focus, .risk-center > .risk-hint { grid-column: 2; }
+}
+@media (max-width: 700px) {
+  .header { padding: 10px 14px; }
+  .kpi-strip { gap: 6px; }
+  .kpi-horizontal { padding: 9px; }
+  .kpi-horizontal span { font-size: 9px; }
+  .sidebar, .risk-center { padding: 10px; }
 }

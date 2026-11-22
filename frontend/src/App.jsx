@@ -42,28 +42,28 @@ import {
 const TYPES_INCIDENT = [
   {
     type: "HEAVY_RAIN",
-    label: "🌧 Pluie extrême",
+    label: "Pluie extrême",
     classe: "btn-pluie",
     cibles: ["Zone"],
     severite: "HIGH",
   },
   {
     type: "POWER_FAILURE",
-    label: "⚡ Panne électrique",
+    label: "Panne électrique",
     classe: "btn-panne",
     cibles: ["PowerStation"],
     severite: "CRITICAL",
   },
   {
     type: "ROAD_BLOCKED",
-    label: "🚧 Route bloquée",
+    label: "Route bloquée",
     classe: "btn-route",
     cibles: ["Road"],
     severite: "HIGH",
   },
   {
     type: "CYBER_ATTACK",
-    label: "🛡 Cyberattaque",
+    label: "Cyberattaque",
     classe: "btn-cyber",
     cibles: ["Hospital", "PowerStation", "TelecomTower", "Warehouse", "Pharmacy"],
     severite: "HIGH",
@@ -228,7 +228,7 @@ export default function App({ readonly = false, secured = false }) {
   const [guidedScenario, setGuidedScenario] = useState(null);
   const [guidedBusy, setGuidedBusy] = useState(false);
   const [guidedError, setGuidedError] = useState(null);
-  const [guidedDetails, setGuidedDetails] = useState(null);
+  const [guidedDetails, setGuidedDetails] = useState(-1);
   const [controlBusy, setControlBusy] = useState(false);
   const [comparateur, setComparateur] = useState(null);
   const soundLedgerFallback = useRef(new Map());
@@ -823,8 +823,8 @@ export default function App({ readonly = false, secured = false }) {
       </section>
 
       <aside className="sidebar control-panel">
-        <section>
-          <div className="section-titre">Contrôle scénario</div>
+        <section className="target-panel">
+          <div className="section-titre">Lieu sélectionné</div>
           <div className="cible">
             {cible ? (
               <>
@@ -849,8 +849,8 @@ export default function App({ readonly = false, secured = false }) {
           </div>
         </section>
 
-        <section className="dispatcher-panel">
-          <div className="section-titre">Poste de commandement</div>
+        <section className="simulation-panel">
+          <div className="section-titre">Pilotage de la simulation</div>
 
           <div className={`flux-chip ${flux?.online ? "flux-live" : flux?.paused ? "flux-pause" : ""}`}>
             <span className="flux-dot" />
@@ -882,8 +882,7 @@ export default function App({ readonly = false, secured = false }) {
 
           <section className="guided-scenario" aria-label="Parcours de crise guidé">
             <div className="section-titre">Parcours de crise guidé</div>
-            <p>Déclenchement uniquement sur vos clics. Le flux automatique continue en parallèle ; les résultats ci-dessous correspondent uniquement à ce parcours.</p>
-            <p>La pluie du parcours est fictive, pas une mesure météo réelle.</p>
+            <p>Étapes déclenchées par vos clics. Le flux automatique continue à part. Pluie fictive, distincte d’Open-Meteo.</p>
             {!flux?.online && <small>Démarrez vous-même le simulateur pour activer les étapes.</small>}
             {guidedError && <small className="notification-error" role="alert">{guidedError}</small>}
             {GUIDED_STEPS.map((stage, index) => {
@@ -899,11 +898,11 @@ export default function App({ readonly = false, secured = false }) {
                     ? `Appel ${result.call_id} · ${result.mission_id ? `mission ${result.mission_id}` : result.call_status}`
                     : `${result.target_id} · ${result.impact_count} site(s) potentiellement concernés`}
                   <button type="button" className="guided-explain-toggle"
-                    aria-expanded={(guidedDetails ?? (guidedScenario.step - 1)) === index}
-                    onClick={() => setGuidedDetails((current) => (current ?? (guidedScenario.step - 1)) === index ? -1 : index)}>
-                    {(guidedDetails ?? (guidedScenario.step - 1)) === index ? "Masquer" : "Voir"} le raisonnement
+                    aria-expanded={guidedDetails === index}
+                    onClick={() => setGuidedDetails((current) => current === index ? -1 : index)}>
+                    {guidedDetails === index ? "Masquer" : "Voir"} le raisonnement
                   </button>
-                  {(guidedDetails ?? (guidedScenario.step - 1)) === index && <GuidedReasoning stage={stage.action} result={result}
+                  {guidedDetails === index && <GuidedReasoning stage={stage.action} result={result}
                     onFocus={infra.some((node) => node.id === (result.target_id || result.destination_id))
                       ? () => {
                         choisirLieuRecherche(infra.find((node) => node.id === (result.target_id || result.destination_id)));
@@ -917,6 +916,11 @@ export default function App({ readonly = false, secured = false }) {
               onClick={() => avancerParcours("reset")}>Recommencer le parcours</button>}
             {(guidedScenario?.step ?? 0) > 0 && <small>Recommencer ne résout pas les incidents déjà créés.</small>}
           </section>
+
+        </section>
+
+        <section className="dispatcher-panel">
+          <div className="section-titre">Flotte et appels</div>
 
           <div className="flotte-liste">
             {flotte.length === 0 && (
@@ -969,8 +973,11 @@ export default function App({ readonly = false, secured = false }) {
 
         <section className="notification-panel" id="section-notifications">
           <div className="section-titre">Centre de notifications</div>
-          <p>Alertes conservées en base · actualisation toutes les 6 secondes. Les nouvelles urgences sont signalées une fois par navigateur ; le premier chargement reste silencieux.</p>
-          <p className="priority-method">À traiter : ordre calculé selon gravité enregistrée, ancienneté et hôpitaux concernés (directement ou estimés par le modèle). P1/P2/P3 ne sont ni une nouvelle gravité constatée ni un ordre d'intervention.</p>
+          <p>Alertes conservées en base · actualisation toutes les 6 secondes.</p>
+          <details className="method-details">
+            <summary>Comment sont classées les alertes ?</summary>
+            <p>Selon la gravité enregistrée, l’ancienneté et les hôpitaux concernés (directement ou estimés). P1/P2/P3 ne sont ni une nouvelle gravité constatée ni un ordre d’intervention. Le signal sonore ne retentit qu’une fois par nouvelle urgence ; le premier chargement reste silencieux.</p>
+          </details>
           <div className="notification-filters" role="group" aria-label="État des notifications">
             {[
               ["NEW", "À traiter"], ["ACKNOWLEDGED", "Pris en compte"], ["RESOLVED", "Résolus"],
@@ -1018,7 +1025,7 @@ export default function App({ readonly = false, secured = false }) {
           </div>
         </section>
 
-        <section>
+        <section className="manual-incidents-panel">
           <div className="section-titre">Déclencher un incident</div>
           {readonly && <small>Lecture seule : résolution et déclenchement réservés à l'opérateur.</small>}
           <div className="boutons-incident">
@@ -1035,7 +1042,7 @@ export default function App({ readonly = false, secured = false }) {
           </div>
         </section>
 
-        <section>
+        <section className="whatif-toggle-panel">
           <div
             className={`basculer-whatif ${modeSimulation ? "actif" : ""}`}
             role="button"
@@ -1468,7 +1475,7 @@ export default function App({ readonly = false, secured = false }) {
                 )}
                 {(plan.detours || []).length > 0 && (
                   <>
-                    <div className="section-titre">Itinéraires alternatifs (cyan)</div>
+                    <div className="section-titre">Itinéraires alternatifs</div>
                     {plan.detours.map((detour) => (
                       <div className="plan-alt" key={detour.dest_id}>
                         <b>→ {detour.dest_id}</b> {detour.dest_name}

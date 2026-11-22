@@ -5,14 +5,15 @@ import { escapeHtml as h } from "../escapeHtml.js";
 import { buildEstimatedFootprint } from "../estimatedFootprint.js";
 import { roadVisible, missionToHighlight, missionRouteVisible } from "../mapVisibility.js";
 
+const MAP_COLORS = { calm: "#83c2bf", watch: "#d4ab70", danger: "#db8580", muted: "#92a7ad" };
 const COULEURS_STATUT = {
-  ONLINE: "#34d399",
-  OPERATIONAL: "#34d399",
-  CLEAR: "#34d399",
-  OFFLINE: "#f43f5e",
-  COMPROMISED: "#f472b6",
-  BLOCKED: "#fbbf24",
-  UNKNOWN: "#22d3ee",
+  ONLINE: MAP_COLORS.calm,
+  OPERATIONAL: MAP_COLORS.calm,
+  CLEAR: MAP_COLORS.calm,
+  OFFLINE: MAP_COLORS.danger,
+  COMPROMISED: MAP_COLORS.watch,
+  BLOCKED: MAP_COLORS.watch,
+  UNKNOWN: MAP_COLORS.muted,
 };
 
 const TAILLES = {
@@ -35,10 +36,10 @@ const EMOJIS_NATURE = {
 };
 
 const RISK_COLORS = {
-  LOW: "#22d3ee",
-  MEDIUM: "#facc15",
-  HIGH: "#f59e0b",
-  CRITICAL: "#f43f5e",
+  LOW: MAP_COLORS.muted,
+  MEDIUM: MAP_COLORS.watch,
+  HIGH: MAP_COLORS.watch,
+  CRITICAL: MAP_COLORS.danger,
 };
 
 const WHATIF_LINK_EXPLANATIONS = {
@@ -102,7 +103,7 @@ export default function MapView({
     if (impact && onWhatifImpactSelection) onWhatifImpactSelection(impact);
     else onSelection(node);
   };
-  const footprintColor = notificationFocus ? "#22d3ee" : whatifImpact ? "#a78bfa" : "#fbbf24";
+  const footprintColor = whatifImpact ? MAP_COLORS.calm : notificationFocus ? MAP_COLORS.calm : MAP_COLORS.watch;
   const footprint = useMemo(() => buildEstimatedFootprint(infra, visibleEstimate?.impacts || []),
     [infra, visibleEstimate]);
   const voirEmprise = () => {
@@ -152,14 +153,14 @@ export default function MapView({
       const latlngs = itineraire.coords.map(([lat, lon]) => [lat, lon]);
 
       L.polyline(latlngs, {
-        color: "#67e8f9",
+        color: MAP_COLORS.calm,
         weight: 10,
         opacity: 0.16,
         lineCap: "round",
       }).addTo(couche.current);
 
       const trait = L.polyline(latlngs, {
-        color: "#67e8f9",
+        color: MAP_COLORS.calm,
         weight: 3.5,
         opacity: 0.95,
         dashArray: "9 6",
@@ -182,7 +183,7 @@ export default function MapView({
       const risk = riskById[node.id];
 
       if (node.kind === "Zone") {
-        const zoneRisk = risk ? RISK_COLORS[risk.risk] : "#22d3ee";
+        const zoneRisk = risk ? RISK_COLORS[risk.risk] : MAP_COLORS.calm;
         const zone = L.circle([node.lat, node.lon], {
           radius: 1450,
           color: zoneRisk,
@@ -240,7 +241,7 @@ export default function MapView({
 
           if (routeVisible) {
             const route = L.polyline(pts, {
-              color: replay || bloquee || node.id === cibleId ? couleur : "#668a88",
+              color: replay || bloquee || node.id === cibleId ? couleur : MAP_COLORS.muted,
               weight: replay ? (node.criticality >= 4 ? 5 : 3) : bloquee || node.id === cibleId ? 3 : 1.5,
               opacity: replay ? 0.8 : bloquee || node.id === cibleId ? 0.85 : 0.35,
               lineCap: "round",
@@ -362,14 +363,14 @@ export default function MapView({
     for (let i = 1; i < etapes.length; i++) {
       if (!etapes[i - 1] || !etapes[i]) continue;
       L.polyline([etapes[i - 1], etapes[i]], {
-        color: "#ffb020", weight: 4, opacity: 0.95, dashArray: "7 7",
+        color: MAP_COLORS.watch, weight: 4, opacity: 0.95, dashArray: "7 7",
         lineCap: "round",
       }).addTo(layer).bindPopup("Lien de dépendance modélisé — pas un trajet routier");
     }
     pts.forEach((point, index) => {
       L.circleMarker(point, {
         radius: index === 0 ? 8 : 5,
-        color: "#ffb020", fillColor: index === 0 ? "#ff4d5e" : "#ffb020",
+        color: MAP_COLORS.watch, fillColor: index === 0 ? MAP_COLORS.danger : MAP_COLORS.watch,
         fillOpacity: 1, weight: 2,
       }).addTo(layer);
     });
@@ -448,7 +449,7 @@ export default function MapView({
           if (!entry?.el) return;
 
           const couleur =
-            score >= 70 ? "#f43f5e" : score >= 50 ? "#f59e0b" : "#22d3ee";
+            score >= 70 ? MAP_COLORS.danger : score >= 50 ? MAP_COLORS.watch : MAP_COLORS.calm;
 
           const onde = document.createElement("div");
           onde.className = "onde";
@@ -474,7 +475,7 @@ export default function MapView({
       const highlighted = replay || mission.mission_id === focusedMissionId;
 
       const couleur =
-        mission.status === "BLOCKED" ? "#f43f5e" : mission.status === "DIVERTED" ? "#22d3ee" : "#34d399";
+        mission.status === "BLOCKED" ? MAP_COLORS.danger : mission.status === "DIVERTED" ? MAP_COLORS.watch : MAP_COLORS.calm;
 
       const latlngs = toLatLngs(path);
 
@@ -487,7 +488,7 @@ export default function MapView({
         }).addTo(layer);
 
         L.polyline(latlngs, {
-          color: highlighted ? couleur : "#82939c",
+          color: highlighted ? couleur : MAP_COLORS.muted,
           weight: highlighted ? 3.5 : 1.5,
           opacity: highlighted ? 0.95 : 0.3,
           dashArray: mission.status === "DIVERTED" ? "8 7" : null,
@@ -526,14 +527,14 @@ export default function MapView({
     if (!layer) return;
     layer.clearLayers();
 
-    const couleurs = { FAST: "#34d399", SHORT: "#60a5fa", SAFE: "#fb923c" };
+    const couleurs = { FAST: MAP_COLORS.calm, SHORT: MAP_COLORS.muted, SAFE: MAP_COLORS.watch };
 
     for (const option of options) {
       const path = option.path || [];
       if (path.length < 4) continue;
 
       const latlngs = toLatLngs(path);
-      const couleur = couleurs[option.variant] || "#a78bfa";
+      const couleur = couleurs[option.variant] || MAP_COLORS.calm;
       const label = { FAST: "🟢 Rapide", SHORT: "🔵 Court", SAFE: "🟠 Sûr" }[option.variant] || option.variant;
 
       L.polyline(latlngs, {
