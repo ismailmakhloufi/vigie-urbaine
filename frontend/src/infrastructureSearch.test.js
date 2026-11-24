@@ -21,5 +21,6 @@ test("recherche insensible aux accents, par identifiant et par synonyme de caté
   assert.deepEqual(searchInfrastructure(nodes, "rue").map((node) => node.id), ["R1"]);
   assert.deepEqual(searchInfrastructure(nodes, "république").map((node) => node.id), ["H1", "R1"]);
   assert.deepEqual(searchInfrastructure(nodes, "p1").map((node) => node.id), ["P1"]);
+  assert.deepEqual(searchInfrastructure(nodes, "hopitaux").map((node) => node.id), ["H1"]);
   assert.deepEqual(searchInfrastructure(nodes, "").map((node) => node.id), []);
 });

@@ -4,6 +4,7 @@ import { NATURES_FR, PROFILS_FR, NIVEAUX_FR, STATUTS_FR, ETYPES_FR, NIVEAU } fro
 import { escapeHtml as h } from "../escapeHtml.js";
 import { buildEstimatedFootprint } from "../estimatedFootprint.js";
 import { roadVisible, missionToHighlight, missionRouteVisible } from "../mapVisibility.js";
+import { splitRouteAtGaps } from "../routeSegments.js";
 
 const MAP_COLORS = { calm: "#83c2bf", watch: "#d4ab70", danger: "#db8580", muted: "#92a7ad" };
 const COULEURS_STATUT = {
@@ -46,7 +47,7 @@ const WHATIF_LINK_EXPLANATIONS = {
   POWER_FAILURE: "Le site dépend directement ou indirectement de l'alimentation du poste ciblé.",
   CYBER_ATTACK: "Une dépendance technique relie le site à la cible de la cyberattaque simulée.",
   ROAD_BLOCKED: "Le modèle relie le site à cette route par un accès ou une chaîne d'approvisionnement.",
-  HEAVY_RAIN: "Le modèle relie le site à cette zone météo, directement ou par le réseau routier.",
+  HEAVY_RAIN: "Le modèle situe le site dans la zone météo ; son inondation n'est pas constatée.",
 };
 
 const toLatLngs = (flat) => {
@@ -67,7 +68,6 @@ export default function MapView({
   sourceRisqueId,
   itineraires = [],
   missions = [],
-  featuredMissionId = null,
   options = [],
   notificationFocus = null,
   notificationImpact = null,
@@ -91,7 +91,7 @@ export default function MapView({
   const [showRoadNetwork, setShowRoadNetwork] = useState(false);
   const [showAllMissionRoutes, setShowAllMissionRoutes] = useState(false);
   const [selectedMissionId, setSelectedMissionId] = useState(null);
-  const focusedMissionId = missionToHighlight(missions, selectedMissionId, featuredMissionId);
+  const focusedMissionId = missionToHighlight(missions, selectedMissionId);
   const lastNotificationFocus = useRef(null);
   const liveEstimate = useMemo(() => liveRiskImpacts.length ? { impacts: liveRiskImpacts } : null,
     [liveRiskImpacts]);
@@ -122,7 +122,7 @@ export default function MapView({
 
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
-      attribution: "© OpenStreetMap",
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(carte.current);
 
     couche.current = L.layerGroup().addTo(carte.current);
@@ -150,7 +150,8 @@ export default function MapView({
 
     for (const itineraire of itineraires) {
       if (!itineraire.coords || itineraire.coords.length < 2) continue;
-      const latlngs = itineraire.coords.map(([lat, lon]) => [lat, lon]);
+      const latlngs = splitRouteAtGaps(itineraire.coords);
+      if (!latlngs.length) continue;
 
       L.polyline(latlngs, {
         color: MAP_COLORS.calm,
@@ -181,6 +182,9 @@ export default function MapView({
       if (node.lat == null || node.lon == null) continue;
 
       const risk = riskById[node.id];
+      const riskReasons = risk?.reasons?.length
+        ? `<ul>${risk.reasons.map((reason) => `<li>${h(reason)}</li>`).join("")}</ul>`
+        : "";
 
       if (node.kind === "Zone") {
         const zoneRisk = risk ? RISK_COLORS[risk.risk] : MAP_COLORS.calm;
@@ -195,7 +199,7 @@ export default function MapView({
           .addTo(couche.current)
           .bindPopup(
             `<b>${h(node.name)}</b><br>Zone météo` +
-              (risk ? `<br><b>Risque ${h(NIVEAU(risk.risk))} : ${h(risk.score)}/100</b>` : "")
+              (risk ? `<br><b>Risque ${h(NIVEAU(risk.risk))} : ${h(risk.score)}/100</b>${riskReasons}` : "")
           );
 
         zone.on("click", () => selectNode(node));
@@ -234,7 +238,7 @@ export default function MapView({
               `<span>Route · ${h(node.id)}</span><br>` +
               `Statut : <b>${h(STATUTS_FR[node.status || "UNKNOWN"] || node.status || "Inconnu")}</b><br>` +
               (risk
-                ? `Risque : <b style="color:${riskColor}">${h(NIVEAU(risk.risk))} · ${h(risk.score)}/100</b><br>`
+                ? `Risque : <b style="color:${riskColor}">${h(NIVEAU(risk.risk))} · ${h(risk.score)}/100</b><br>${riskReasons}`
                 : "Risque : FAIBLE / non exposé<br>") +
               (node.criticality != null ? `Criticité : ${h(node.criticality)}/5<br>` : "") +
             `</div>`;
@@ -312,7 +316,7 @@ export default function MapView({
             `<span>${h(NATURES_FR[node.kind] || node.kind)} · ${h(node.id)}</span><br>` +
             `Statut : <b>${h(STATUTS_FR[node.status || "UNKNOWN"] || node.status || "Inconnu")}</b><br>` +
             (risk
-              ? `Risque : <b style="color:${riskColor}">${h(NIVEAU(risk.risk))} · ${h(risk.score)}/100</b><br>`
+              ? `Risque : <b style="color:${riskColor}">${h(NIVEAU(risk.risk))} · ${h(risk.score)}/100</b><br>${riskReasons}`
               : "Risque : FAIBLE / non exposé<br>") +
             (node.criticality != null ? `Criticité : ${h(node.criticality)}/5<br>` : "") +
             (node.backup_power_hours != null
@@ -477,9 +481,9 @@ export default function MapView({
       const couleur =
         mission.status === "BLOCKED" ? MAP_COLORS.danger : mission.status === "DIVERTED" ? MAP_COLORS.watch : MAP_COLORS.calm;
 
-      const latlngs = toLatLngs(path);
+      const latlngs = splitRouteAtGaps(toLatLngs(path));
 
-      if (missionRouteVisible(mission.mission_id, focusedMissionId, showAllMissionRoutes, replay)) {
+      if (latlngs.length && missionRouteVisible(mission.mission_id, focusedMissionId, showAllMissionRoutes, replay)) {
         if (highlighted) L.polyline(latlngs, {
           color: couleur,
           weight: 9,
@@ -533,7 +537,8 @@ export default function MapView({
       const path = option.path || [];
       if (path.length < 4) continue;
 
-      const latlngs = toLatLngs(path);
+      const latlngs = splitRouteAtGaps(toLatLngs(path));
+      if (!latlngs.length) continue;
       const couleur = couleurs[option.variant] || MAP_COLORS.calm;
       const label = { FAST: "🟢 Rapide", SHORT: "🔵 Court", SAFE: "🟠 Sûr" }[option.variant] || option.variant;
 
@@ -556,6 +561,7 @@ export default function MapView({
           `<div class="map-popup">` +
             `<b>${label}</b><br>` +
             `${h(option.estimated_time_min)} min · ${h(option.distance_km)} km<br>` +
+            (option.uncertain_links?.length ? `Liaisons à vérifier ${h(option.uncertain_links.map((link) => link.join("–")).join(", "))}<br>` : "") +
             `${h(option.route_names?.join(" › ") || "")}` +
           `</div>`
         );

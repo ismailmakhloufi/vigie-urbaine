@@ -60,8 +60,11 @@ def ensure_fleet() -> int:
 def list_fleet() -> list[dict]:
     ensure_fleet()
     from app.services import sources
-    if sources.stream_status()["online"]:
-        _tick_retours()
+    online = sources.stream_status()["online"]
+    if online or mongo_client._db.vehicles.count_documents(
+        {"status": "RETURNING", "return_demo_manual": True}, limit=1,
+    ):
+        _tick_retours(only_manual=not online)
     out = []
     for v in mongo_client.list_vehicles():
         v = dict(v)
@@ -156,11 +159,12 @@ def _haversine_km(a: list[float], b: list[float]) -> float:
     return 6371.0 * 2 * math.asin(math.sqrt(x))
 
 
-def release(mission_id: str, position: list[float] | None = None, status: str = "AVAILABLE"):
+def release(mission_id: str, position: list[float] | None = None, status: str = "AVAILABLE",
+            demo_manual: bool = False):
     v = next((v for v in mongo_client.list_vehicles() if v.get("mission_id") == mission_id), None)
     if not v:
         return None
-    fields = {"status": status, "mission_id": None}
+    fields = {"status": status, "mission_id": None, "return_demo_manual": demo_manual}
     if position:
         fields["position"] = position
     if status == "RETURNING" and position:
@@ -177,12 +181,14 @@ def release(mission_id: str, position: list[float] | None = None, status: str = 
     return v["callsign"]
 
 
-def _tick_retours():
+def _tick_retours(only_manual: bool = False):
     """Fait avancer les vehicules en retour de base vers leur depot."""
     now = _now()
     coords = _base_coords()
     for v in mongo_client.list_vehicles():
         if v.get("status") != "RETURNING":
+            continue
+        if only_manual and not v.get("return_demo_manual"):
             continue
         try:
             until = datetime.fromisoformat(v["return_until"])

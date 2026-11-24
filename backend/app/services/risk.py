@@ -7,7 +7,7 @@ Objectif :
 - appliquer les règles "backup électrique" uniquement aux types concernés ;
 - retourner les raisons détaillées pour le frontend et la soutenance.
 
-Score actuel :
+Score des dépendances techniques (énergie, cyber, météo) :
 - dépendance directe : +30
 - dépendance indirecte : +10
 - infrastructure critique (criticality >= 4) : +25
@@ -16,6 +16,11 @@ Score actuel :
 - plusieurs incidents actifs simultanés (>= 2) : +15
 - sévérité HIGH : +5
 - sévérité CRITICAL : +10
+
+Une route bloquée représente une gêne d'accès, pas une panne du site :
+accès direct +25, approvisionnement potentiel +10, criticité >= 4 +10,
+puis sévérité. Ni secours électrique ni nombre global d'incidents ne sont
+ajoutés à ce score routier.
 
 Classes :
 - LOW      < 30
@@ -63,6 +68,7 @@ def score_node(
     backup_power_hours: int | float | None,
     severity: str,
     active_incidents: int,
+    event_type: str | None = None,
 ) -> tuple[int, list[str]]:
     """
     Calcule le score de risque d'une infrastructure.
@@ -83,6 +89,9 @@ def score_node(
         LOW / MEDIUM / HIGH / CRITICAL.
     active_incidents:
         Nombre d'incidents actuellement actifs dans la ville.
+    event_type:
+        Type d'événement ; ROAD_BLOCKED utilise un score d'accessibilité
+        distinct du score de défaillance technique.
 
     Returns
     -------
@@ -91,6 +100,35 @@ def score_node(
     """
     reasons: list[str] = []
     score = 0
+
+    if event_type == "ROAD_BLOCKED":
+        access_points = 25 if depth <= 1 else 10
+        score += access_points
+        reasons.append(
+            f"accès routier direct potentiellement perturbé (+{access_points})"
+            if depth <= 1 else
+            f"approvisionnement potentiellement retardé (+{access_points})"
+        )
+        if criticality >= 4:
+            score += 10
+            reasons.append("service prioritaire à préserver (+10)")
+        severity_points = SEVERITY_POINTS.get(severity, 0)
+        if severity_points:
+            score += severity_points
+            reasons.append(f"gravité du blocage (+{severity_points})")
+        return score, reasons
+
+    if event_type == "HEAVY_RAIN":
+        score = 20
+        reasons.append("exposition possible dans la zone sous fortes pluies (+20) ; inondation non constatée")
+        if criticality >= 4:
+            score += 10
+            reasons.append("service prioritaire à surveiller (+10)")
+        severity_points = SEVERITY_POINTS.get(severity, 0)
+        if severity_points:
+            score += severity_points
+            reasons.append(f"intensité des pluies (+{severity_points})")
+        return score, reasons
 
     # 1. Distance par rapport à l'incident
     if depth <= 1:

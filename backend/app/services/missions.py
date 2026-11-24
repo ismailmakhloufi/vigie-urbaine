@@ -90,7 +90,7 @@ class RouteUnavailable(RuntimeError):
     """Pas d'itinéraire dans l'état courant du réseau."""
 
 
-def create_mission(origin_id: str, destination_id: str, profile: str, caller_note: str = "", vehicle: str | None = None, call_id: str | None = None) -> dict:
+def create_mission(origin_id: str, destination_id: str, profile: str, caller_note: str = "", vehicle: str | None = None, call_id: str | None = None, demo_manual: bool = False) -> dict:
     """L'appel arrive : calcul du trajet optimal a l'instant T + depart."""
     try:
         route = compute_route(origin_id, destination_id, profile)
@@ -106,6 +106,7 @@ def create_mission(origin_id: str, destination_id: str, profile: str, caller_not
         "profile": profile,
         "vehicle": vehicle,
         "call_id": call_id,
+        "demo_manual": demo_manual,
         "caller_note": caller_note,
         "status": "EN_ROUTE",
         "route": route["route"],
@@ -136,7 +137,8 @@ def _release_vehicle(doc: dict, status: str = "AVAILABLE"):
         return
     from app.services.fleet import release
 
-    release(doc["mission_id"], doc.get("position") or None, status)
+    release(doc["mission_id"], doc.get("position") or None, status,
+            demo_manual=doc.get("demo_manual", False))
 
 
 def _tick_mission(doc: dict) -> dict:
@@ -281,6 +283,44 @@ def _tick_mission(doc: dict) -> dict:
     return doc
 
 
+def current_road_index(doc: dict) -> int:
+    """Tronçon occupé selon la progression connue ; ne jamais repartir de l'origine."""
+    route = doc.get("route") or []
+    offsets = doc.get("road_offsets") or []
+    if not route or not offsets:
+        return 0
+    progress = doc.get("progress") or 0.0
+    if doc.get("demo_manual") and doc.get("departure_at") and doc.get("eta_min"):
+        departure = doc["departure_at"]
+        if departure.tzinfo is None:
+            departure = departure.replace(tzinfo=timezone.utc)
+        elapsed = (_now() - departure).total_seconds() / 60.0 * SIMULATION_SPEED
+        progress = max(progress, elapsed / max(doc["eta_min"], 1))
+    traveled = min(1.0, max(0.0, progress)) * offsets[-1]["end_km"]
+    return min(next((i for i, offset in enumerate(offsets)
+                     if traveled <= offset["end_km"]), len(route) - 1), len(route) - 1)
+
+
+def short_detour_candidates(doc: dict) -> list[dict]:
+    """Prévisualise les routes à bloquer devant une mission, sans écriture."""
+    if doc.get("status") not in ("EN_ROUTE", "DIVERTED"):
+        return []
+    route = doc.get("route") or []
+    index = current_road_index(doc)
+    choices = []
+    for road in route[index + 1:-1]:
+        try:
+            alternate = compute_route(route[index], doc["destination_id"], doc["profile"],
+                                      mode="SHORT", extra_blocked={road})
+        except (LookupError, RuntimeError):
+            continue
+        if road not in alternate["route"]:
+            choices.append({"road_id": road, "route": alternate["route"],
+                            "distance_km": alternate["distance_km"],
+                            "estimated_time_min": alternate["estimated_time_min"]})
+    return choices
+
+
 def radio(mission_id: str, author: str, text: str) -> dict | None:
     """Canal radio : le commandement ou le conducteur parlent dans le journal."""
     doc = mongo_client.get_mission(mission_id)
@@ -304,7 +344,7 @@ def choose_route(mission_id: str, variant: str) -> dict:
     # reprise depuis le troncon courant vers la destination
     from app.services.routing import compute_route
 
-    cur_road = doc["route"][0]
+    cur_road = doc["route"][current_road_index(doc)]
     new_route = compute_route(cur_road, doc["destination_id"], doc["profile"], mode=variant)
     labels = {"FAST": "🟢 RAPIDE", "SHORT": "🔵 COURT", "SAFE": "🟠 SÛR"}
     now = _now()
@@ -407,8 +447,9 @@ def _maybe_end_corridor(doc: dict):
 def list_missions(limit: int = 30) -> list[dict]:
     """Tick toutes les missions actives puis renvoie les instantanes."""
     from app.services import sources
-    ticked = ({doc["mission_id"]: _tick_mission(doc) for doc in mongo_client.active_missions()}
-              if sources.stream_status()["online"] else {})
+    online = sources.stream_status()["online"]
+    ticked = {doc["mission_id"]: _tick_mission(doc) for doc in mongo_client.active_missions()
+              if online or doc.get("demo_manual")}
     result = list(ticked.values())
 
     seen = set(ticked)

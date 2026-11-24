@@ -58,11 +58,12 @@ export default function ReplayView({ infrastructure, onClose }) {
   return (
     <div className="replay-screen">
       <header className="replay-header">
-        <div><small>VIGIE URBAINE // ARCHIVES OBSERVÉES</small><h1>Relecture de crise</h1></div>
-        <button onClick={onClose}>← Retour au direct</button>
+        <div className="replay-brand"><h1>Vigie <span>Urbaine</span></h1><p>Centre d'analyse des risques urbains en cascade</p></div>
+        <div className="replay-heading"><small>CONSULTATION EN LECTURE SEULE</small><h2>Relecture de crise</h2></div>
+        <button type="button" onClick={onClose}>← Retour au direct</button>
       </header>
       <div className="replay-timeline">
-        <label htmlFor="replay-range">Instant enregistré {index >= 0 ? index + 1 : 0}/{timeline.length}</label>
+        <label htmlFor="replay-range">Instant enregistré <b>{index >= 0 ? index + 1 : 0} / {timeline.length}</b></label>
         <button disabled={index <= 0} onClick={() => setSelectedId(timeline[index - 1].id)}>← Précédent</button>
         <input id="replay-range" type="range" min="0" max={Math.max(0, timeline.length - 1)}
           value={Math.max(0, index)} disabled={timeline.length < 2}
@@ -72,14 +73,15 @@ export default function ReplayView({ infrastructure, onClose }) {
         <strong>{snapshot ? horodatage(snapshot.captured_at) : "—"}</strong>
       </div>
       <div className="replay-warning">
-        ARCHIVE — données enregistrées dans une fenêtre de lecture, non simultanément. Géométrie de référence actuelle ; statuts et scores archivés.
+        <strong>Archive en lecture seule</strong>
+        <span>Les données ne sont pas enregistrées simultanément. Géométrie actuelle ; statuts et scores archivés.
         {snapshot && ` Fenêtre de capture : ${Math.max(0, (new Date(snapshot.captured_at) - new Date(snapshot.started_at)) / 1000).toFixed(1)} s.`}
-        Aucune intervention n'est possible ici. Conservation : 24 h ; les archives antérieures ne sont pas reconstituées.
+        {" "}Conservation : 24 h ; les archives antérieures ne sont pas reconstituées.</span>
       </div>
-      {error && <div className="replay-empty" role="alert">Archive indisponible : {error}</div>}
-      {!error && loading && <div className="replay-empty">Chargement des archives…</div>}
-      {!error && !loading && timeline.length === 0 && <div className="replay-empty">Aucun instantané enregistré pour le moment.</div>}
-      {!error && timeline.length > 0 && !snapshot && <div className="replay-empty">Lecture de l'instantané…</div>}
+      {error && <div className="replay-empty" role="alert"><div><strong>Archive indisponible</strong><p>{error}</p></div></div>}
+      {!error && loading && <div className="replay-empty" role="status"><div><strong>Chargement des archives…</strong></div></div>}
+      {!error && !loading && timeline.length === 0 && <div className="replay-empty"><div><strong>Aucun instantané enregistré</strong><p>Les captures apparaîtront ici lorsque l'enregistrement de la simulation sera actif.</p></div></div>}
+      {!error && timeline.length > 0 && !snapshot && <div className="replay-empty" role="status"><div><strong>Lecture de l'instantané…</strong></div></div>}
       {snapshot && !error && (
         <div className="replay-content">
           <div className="replay-map">

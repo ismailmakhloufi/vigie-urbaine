@@ -96,6 +96,7 @@ def _envoyer(call: dict, chosen: dict) -> dict:
         caller_note=call.get("note", ""),
         vehicle=chosen["callsign"],
         call_id=call["call_id"],
+        demo_manual=call.get("demo_manual", False),
     )
     if not fleet.assign(chosen["callsign"], mission["mission_id"], call["call_id"]):
         # Ne jamais laisser une mission active sans propriétaire.
@@ -124,7 +125,7 @@ def _dispatch(call: dict, coords: list[float]) -> tuple[str, dict | None, dict |
     return ("ROUTE_UNAVAILABLE" if route_failed and reserved else "PENDING"), None, None
 
 
-def create_call(kind: str, destination_id: str, note: str = "") -> dict:
+def create_call(kind: str, destination_id: str, note: str = "", demo_manual: bool = False) -> dict:
     """L'appel arrive ; le dispatcher le traite tout de suite."""
     kind = (kind or MEDICAL).upper()
     if kind not in (MEDICAL, SUPPLY):
@@ -141,6 +142,7 @@ def create_call(kind: str, destination_id: str, note: str = "") -> dict:
         "status": "PENDING",
         "created_at": _iso(_now()),
         "queue_tries": 0,
+        "demo_manual": demo_manual,
     }
 
     mongo_client.insert_call(call)

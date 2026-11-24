@@ -27,6 +27,7 @@ def _rescore(impact, active_count):
             criticality=node.criticality,
             backup_power_hours=node.backup_power_hours,
             severity=impact.severity, active_incidents=active_count,
+            event_type=impact.event_type,
         )
         rescored.append(node.model_copy(update={
             "score": score, "risk": risk_class(score), "reasons": reasons,

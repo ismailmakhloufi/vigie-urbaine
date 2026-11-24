@@ -98,6 +98,40 @@ class OperationalJourneyTests(unittest.TestCase):
         self.assertEqual(saved["status"], "NO_VEHICLE")
         self.assertEqual(self.db.missions.count_documents({}), 0)
 
+    def test_appel_samu_manuel_avance_sans_demarrer_le_flux(self):
+        with patch("app.routes.dispatch.neo4j_client.query", return_value=[{"id": "H1"}]):
+            response = self.client.post("/demo/medical-call", json={"destination_id": "H1"})
+        self.assertEqual(response.status_code, 200, response.text)
+        mission_id = response.json()["mission_id"]
+        self.assertTrue(self.db.missions.find_one({"mission_id": mission_id})["demo_manual"])
+        with patch("app.services.sources.stream_status", return_value={"online": False}), \
+             patch("app.services.missions._now", return_value=datetime.now(timezone.utc) + timedelta(minutes=10)):
+            missions = self.client.get("/missions").json()
+        self.assertEqual(next(m for m in missions if m["mission_id"] == mission_id)["status"], "ARRIVED")
+        self.assertEqual(self.db.events.count_documents({}), 0)
+
+    def test_appel_manuel_exige_un_hopital_sans_creer_d_appel(self):
+        with patch("app.routes.dispatch.neo4j_client.query", return_value=[]):
+            response = self.client.post("/demo/medical-call", json={"destination_id": "R2"})
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(self.db.calls.count_documents({}), 0)
+
+    def test_aperçu_detours_et_comparateur_sans_mutation(self):
+        self.db.missions.insert_one({
+            "mission_id": "M-42", "status": "EN_ROUTE", "profile": "AMBULANCE",
+            "destination_id": "H1", "route": ["R1", "R2", "R3", "R4"],
+            "road_offsets": [{"end_km": 1}, {"end_km": 2},
+                             {"end_km": 3}, {"end_km": 4}], "progress": 0.3,
+        })
+        with patch("app.routes.dispatch.missions.short_detour_candidates", return_value=[{"road_id": "R3"}]), \
+             patch("app.routes.dispatch.compute_route_options", return_value={"options": [{"variant": "SHORT"}]}) as options:
+            detours = self.client.get("/missions/M-42/demo-detours")
+            comparer = self.client.get("/missions/M-42/route-options")
+        self.assertEqual(detours.json()["candidates"], [{"road_id": "R3"}])
+        self.assertEqual(comparer.json()["options"][0]["variant"], "SHORT")
+        options.assert_called_once_with("R2", "H1", "AMBULANCE")
+        self.assertEqual(self.db.events.count_documents({}), 0)
+
     def test_incident_projection_resolution_et_historique(self):
         graph = {"status": "CLEAR", "last_event": None}
 

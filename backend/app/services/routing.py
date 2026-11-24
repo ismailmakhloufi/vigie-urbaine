@@ -16,13 +16,26 @@ Profils :
 """
 
 import heapq
+import json
 import math
+from time import monotonic
 from datetime import datetime, timezone
+from pathlib import Path
 
 from app.db.mongo_client import mongo_client
 from app.db.neo4j_client import neo4j_client
 
 ACCESS_OVERHEAD_MIN = 2  # chargement/déchargement aux 2 extrémités
+
+# L'audit du graphe (docs/audit-graphe.md) relève 6,68 km entre les
+# tracés de R22 et R5 pour 1,4 km déclaré. Écarter la liaison dans les
+# deux sens tant que sa géométrie et ses coûts n'ont pas été vérifiés.
+_UNVERIFIED_ROAD_LINKS = {frozenset(("R22", "R5"))}
+_OSM_ROAD_LINKS = json.loads(Path(__file__).with_name("osm_road_links.json").read_text(encoding="utf-8-sig"))
+
+
+def road_link_is_usable(source: str, destination: str) -> bool:
+    return frozenset((source, destination)) not in _UNVERIFIED_ROAD_LINKS
 
 
 def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -71,21 +84,19 @@ def _active_dynamic_state():
 # ----- cache reseau : la structure (routes + aretes) ne bouge presque jamais,
 # on evite de requeter Neo4j a chaque itineraire. TTL court pour laisser
 # passer les changements de statut (blocages). -----
-import time as _time
-
 _RESEAU_CACHE: dict = {"t": 0.0, "valeur": None}
 _RESEAU_TTL = 10.0  # secondes
 
 
 def _reseau() -> tuple[dict, list]:
-    maintenant = _time.monotonic()
+    maintenant = monotonic()
     if _RESEAU_CACHE["valeur"] is None or maintenant - _RESEAU_CACHE["t"] > _RESEAU_TTL:
-        _RESEAU_CACHE["valeur"] = _load_network(set())
+        _RESEAU_CACHE["valeur"] = _load_network()
         _RESEAU_CACHE["t"] = maintenant
     return _RESEAU_CACHE["valeur"]
 
 
-def _load_network(rainy_zone_ids: set[str]):
+def _load_network():
     """
     Charge noeuds (Road) + aretes (CONNECTS_TO) via Neo4j :
     retourne dict road_id -> {status, flood, name, zone}, et liste d'edges.
@@ -95,7 +106,8 @@ def _load_network(rainy_zone_ids: set[str]):
         MATCH (r:Road)
         OPTIONAL MATCH (r)-[:LOCATED_IN]->(z:Zone)
         RETURN r.id AS id, r.name AS name, r.status AS status,
-               r.flood_susceptibility AS flood, z.id AS zone_id, z.name AS zone_name
+               r.flood_susceptibility AS flood, z.id AS zone_id, z.name AS zone_name,
+               r.path AS path
         """
     )
     roads = {
@@ -115,6 +127,26 @@ def _load_network(rainy_zone_ids: set[str]):
         "e.travel_time_min AS minutes, e.traffic_level AS traffic, "
         "e.flood_susceptibility AS flood"
     )
+    points = {
+        row["id"]: list(zip(path[::2], path[1::2]))
+        for row in road_rows if (path := row.get("path")) and len(path) >= 4
+    }
+    for edge in edge_rows:
+        source, destination = edge["src"], edge["dst"]
+        left, right = points.get(source, []), points.get(destination, [])
+        osm = _OSM_ROAD_LINKS.get(f"{source}-{destination}")
+        if osm:
+            anchors = [tuple(reversed(list(map(float, anchor.split(","))))) for anchor in osm["anchors"]]
+            if anchors[0] in left and anchors[1] in right:
+                edge.update(km=osm["distance_km"], minutes=osm["minutes"], osm_path=osm["path"], uncertain=False)
+                continue
+        gap = min((_haversine(*a, *b) for a in left for b in right), default=None)
+        declared_km = edge["km"]
+        edge["uncertain"] = gap is None or gap > min(1.0, declared_km + 0.1)
+        if gap is not None and gap > declared_km + 0.1:
+            # Borne géographique pour les arcs simulés, en conservant leur vitesse implicite.
+            minutes_per_km = edge["minutes"] / declared_km if edge["minutes"] and declared_km > 0 else 2.0
+            edge.update(km=gap, minutes=gap * minutes_per_km)
     return roads, edge_rows
 
 
@@ -192,7 +224,7 @@ def _access_road(infra_id: str, blocked: set) -> tuple[str | None, float]:
             return None, 0.0
         return infra_id, 0.0
 
-    if not row["zone_id"] or row["zone_id"] in blocked or row["lat"] is None:
+    if not row["zone_id"] or row["zone_id"] in blocked or row["lat"] is None or row["lon"] is None:
         return None, 0.0
 
     zone_roads = neo4j_client.query(
@@ -202,24 +234,13 @@ def _access_road(infra_id: str, blocked: set) -> tuple[str | None, float]:
         {"zid": row["zone_id"]},
     )
 
-    def haversine_min(lat1, lon1, lat2, lon2):
-        r_lat = math.radians
-        dlat = r_lat(lat2 - lat1)
-        dlon = r_lat(lon2 - lon1)
-        a = (
-            math.sin(dlat / 2) ** 2
-            + math.cos(r_lat(lat1)) * math.cos(r_lat(lat2)) * math.sin(dlon / 2) ** 2
-        )
-        km = 6371.0 * 2 * math.asin(math.sqrt(a))
-        return km / 25.0 * 60.0, km
-
-    best_id, best_min, cached_km = None, float("inf"), 0.0
+    best_id, best_min = None, math.inf
     for cand in zone_roads:
-        if cand["lat"] is None or cand["id"] in blocked:
+        if cand["lat"] is None or cand["lon"] is None or cand["id"] in blocked:
             continue
-        m, km = haversine_min(row["lat"], row["lon"], cand["lat"], cand["lon"])
-        if m < best_min:
-            best_min, best_id, cached_km = m, cand["id"], km
+        minutes = _haversine(row["lat"], row["lon"], cand["lat"], cand["lon"]) / 25.0 * 60.0
+        if minutes < best_min:
+            best_min, best_id = minutes, cand["id"]
     if best_id is None:
         return None, 0.0
     return best_id, round(max(best_min, 1.0), 1)
@@ -277,10 +298,12 @@ def compute_route(
         raise RuntimeError(f"Aucune route d'acces epargnee pour la destination {destination_id}")
 
     # --- Dijkstra multi-source ---
-    adj: dict[str, list[tuple[str, dict]]] = {}
+    adj: dict[str, list[tuple[str, dict, float]]] = {}
     for edge in edges:
         src, dst = edge["src"], edge["dst"]
         if src == dst or src in blocked or dst in blocked:
+            continue
+        if not road_link_is_usable(src, dst):
             continue
         if roads.get(src, {}).get("status") == "BLOCKED":
             continue
@@ -332,21 +355,29 @@ def compute_route(
     # reconstruction
     chain: list[str] = []
     segments_kms: list[float] = []
+    segments_minutes: list[float] = []
+    route_edges: list[dict] = []
     node = best_end
     while node is not None:
         chain.append(node)
         back = prev_edge.get(node)
         if back:
             prev_node, edge = back
+            route_edges.append(edge)
             segments_kms.append(edge["km"])
+            segments_minutes.append(float(edge["minutes"] or edge["km"] * 2.0))
             node = prev_node
         else:
             node = None
     chain.reverse()
     segments_kms.reverse()
+    route_edges.reverse()
 
     total_kms = sum(segments_kms)
-    est_time = int(round(best_cost + start_access_min + end_access_min))
+    # SHORT optimise les kilomètres : son coût Dijkstra n'est pas une durée.
+    # L'ETA de cette variante reste une estimation des temps d'arêtes déclarés.
+    route_time = sum(segments_minutes) * PROFILE_WEIGHTS[profile][3] if mode == "SHORT" else best_cost
+    est_time = int(round(route_time + start_access_min + end_access_min))
 
     avoided: list[dict] = []
     for rid in sorted(blocked):
@@ -370,18 +401,27 @@ def compute_route(
         {"ids": chain},
     )
     path_by_id = {row["id"]: row["path"] for row in path_rows}
+    uncertain_links = []
+    for edge in route_edges:
+        if edge.get("uncertain", True):
+            uncertain_links.append([edge["src"], edge["dst"]])
     full_path: list[float] = []
     road_offsets: list[dict] = []  # position cumulee (km) de chaque route du chain
     cum_km = 0.0
-    for rid in chain:
-        segment = path_by_id.get(rid)
+    all_osm = bool(route_edges) and all(edge.get("osm_path") for edge in route_edges)
+    if all_osm:
+        route_paths = [(edge["src"], edge["osm_path"]) for edge in route_edges]
+        route_paths.append((chain[-1], route_edges[-1]["osm_path"][-2:]))
+    else:
+        route_paths = [(rid, path_by_id.get(rid)) for rid in chain]
+    for rid, segment in route_paths:
         if not segment:
             continue
         start = cum_km
         pts = [(segment[i], segment[i + 1]) for i in range(0, len(segment) - 1, 2)]
         for j in range(1, len(pts)):
             cum_km += _haversine(pts[j - 1][0], pts[j - 1][1], pts[j][0], pts[j][1])
-        if full_path:
+        if full_path[-2:] == segment[:2]:
             full_path.extend(segment[2:])
         else:
             full_path.extend(segment)
@@ -400,6 +440,8 @@ def compute_route(
         "route_names": [roads[r]["name"] for r in chain],
         "estimated_time_min": est_time,
         "distance_km": round(total_kms, 1),
+        "uncertain_links": uncertain_links,
+        "geometry_source": "OPENSTREETMAP_OSRM" if all_osm else "SIMULATION_GRAPH",
         "avoided": avoided[:8],
         "dynamic_notes": notes,
         "path": full_path,
@@ -414,8 +456,6 @@ VARIANTS = [("FAST", "Rapide"), ("SHORT", "Court"), ("SAFE", "Sûr")]
 
 def compute_route_options(origin_id: str, destination_id: str, profile: str = "AMBULANCE") -> dict:
     """Le comparateur du commandement : 3 propositions côte à côte."""
-    from app.services.traffic import describe
-
     options = []
     for mode, label in VARIANTS:
         try:
@@ -427,6 +467,8 @@ def compute_route_options(origin_id: str, destination_id: str, profile: str = "A
             "label": label,
             "estimated_time_min": route["estimated_time_min"],
             "distance_km": route["distance_km"],
+            "uncertain_links": route.get("uncertain_links", []),
+            "geometry_source": route.get("geometry_source", "SIMULATION_GRAPH"),
             "route": route["route"],
             "route_names": route["route_names"],
             "path": route.get("path", []),

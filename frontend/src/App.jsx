@@ -4,6 +4,7 @@ import ReplayView from "./components/ReplayView.jsx";
 import InfrastructureSearch from "./components/InfrastructureSearch.jsx";
 import { recordIncoming } from "./notificationSound.js";
 import { prioritizeNotifications } from "./notificationPriority.js";
+import { propagationExplanation } from "./propagationExplanation.js";
 import {
   NATURES_FR,
   PROFILS_FR,
@@ -28,11 +29,7 @@ import {
   getMissions,
   getFleet,
   getCalls,
-  getStream,
-  getGuidedScenario,
-  postGuidedScenario,
-  postStreamAction,
-  postRouteOptions,
+  getMissionRouteOptions,
   postCorridor,
   postRadio,
   postChooseRoute,
@@ -68,13 +65,6 @@ const TYPES_INCIDENT = [
     cibles: ["Hospital", "PowerStation", "TelecomTower", "Warehouse", "Pharmacy"],
     severite: "HIGH",
   },
-];
-
-const GUIDED_STEPS = [
-  { action: "rain", label: "1 · Pluie extrême simulée", detail: "Une zone est exposée ; les sites potentiellement touchés apparaissent sur la carte." },
-  { action: "ambulance", label: "2 · Appel médical et ambulance", detail: "Une mission et son itinéraire sont créés depuis une base disponible." },
-  { action: "block", label: "3 · Route bloquée et embouteillage", detail: "Le trafic des rues voisines augmente ; l'ambulance cherche un détour." },
-  { action: "power", label: "4 · Panne électrique", detail: "Les dépendances du poste touché sont recalculées." },
 ];
 
 const EMOJI_KIND = {
@@ -145,45 +135,17 @@ function ScenarioCompare({ scenario }) {
   );
 }
 
-function GuidedReasoning({ stage, result, onFocus }) {
-  const incident = stage !== "ambulance";
-  const congestion = Object.entries(result.congestion || {})
-    .filter(([, bump]) => bump >= 2)
-    .sort((a, b) => b[1] - a[1]);
-  const before = result.previous_route_names?.length ? result.previous_route_names : result.previous_route;
-  const after = result.new_route_names?.length ? result.new_route_names : result.new_route;
-  const initial = result.initial_route_names?.length ? result.initial_route_names : result.initial_route;
-
-  return <div className="guided-reasoning">
-    <div><b>1 · Fait enregistré</b>
-      {incident ? <p>{stage === "rain" ? "Pluie extrême fictive" : stage === "block" ? "Route bloquée simulée" : "Panne électrique simulée"} : {result.target_name || result.target_id} ({result.target_id}). {stage === "rain" && "Pas une mesure Open-Meteo."}</p>
-        : <p>Appel médical {result.call_id} vers {result.destination_name || result.destination_id} · {result.call_status}.</p>}
+function OperationsHeader({ view, onView, onClose, missionCount }) {
+  return <header className="operations-header">
+    <div className="operations-heading">
+      <div><small>SUIVI OPÉRATIONNEL</small><h2 id="operations-title">Missions et ressources</h2></div>
+      <button type="button" className="operations-close" onClick={onClose} aria-label="Fermer le suivi opérationnel">✕</button>
     </div>
-    <div><b>2 · Raisonnement de l’application</b>
-      {incident ? <>
-        <p>{result.impact_count} site(s) potentiellement concerné(s) selon le graphe de dépendances ; profondeur maximale {result.max_depth ?? "—"} lien(s). Ce ne sont pas des dégâts observés.</p>
-        {result.impact_examples?.length ? <ul>{result.impact_examples.map((site) => <li key={site.id}>
-          <strong>{site.name} ({site.id}) · risque {NIVEAU(site.risk)} · {site.score}/100</strong>
-          {site.chain?.length > 0 && <span>Chaîne : {site.chain.map((node) => node.name || node.id).join(" → ")}</span>}
-          {site.reasons?.length > 0 && <span>Pourquoi : {site.reasons.join(" · ")}</span>}
-        </li>)}</ul> : <small>{result.impact_examples ? "Aucune dépendance trouvée pour cet incident." : "Détail des impacts indisponible pour cette étape antérieure."}</small>}
-      </> : result.mission_id ? <>
-        <p>{result.vehicle || "Ambulance"} disponible : départ de {result.origin_name || "sa base"} vers {result.destination_name || result.destination_id}. Itinéraire initial calculé avec l’état du réseau au moment de l’appel.</p>
-        <p>Trajet initial : {initial?.join(" › ") || "non disponible"} · ETA initiale {result.initial_eta_min ?? "—"} min simulées.</p>
-      </> : <p>Appel en attente : aucune ambulance ni itinéraire ne sont encore attribués. L’étape suivante attend une mission en route.</p>}
-      {stage === "block" && <>
-        <p>Trafic majoré sur {congestion.length} rue(s) voisine(s) dans le modèle{congestion.length ? ` : ${congestion.slice(0, 5).map(([id]) => id).join(", ")}` : ""}. Il ne s’agit pas d’une mesure de circulation réelle.</p>
-        <p>Avant : {before?.join(" › ") || "—"} · durée calculée {result.previous_eta_min ?? "—"} min simulées.</p>
-        <p>Après : {after?.join(" › ") || "—"} · durée calculée {result.new_eta_min ?? "—"} min simulées.</p>
-      </>}
+    <div className="operations-tabs" role="group" aria-label="Vue du suivi opérationnel">
+      <button type="button" className={view === "missions" ? "active" : ""} aria-pressed={view === "missions"} onClick={() => onView("missions")}>Missions · {missionCount}</button>
+      <button type="button" className={view === "resources" ? "active" : ""} aria-pressed={view === "resources"} onClick={() => onView("resources")}>Flotte et appels</button>
     </div>
-    <div><b>3 · Résultat visible</b>
-      <p>{stage === "block" ? (result.rerouted ? "Ambulance déroutée : le nouveau trajet remplace l’ancien sur la carte." : "Détour non effectué : consultez l’état de la mission.")
-        : stage === "ambulance" ? (result.mission_id ? "Mission et tracé affichés sur la carte tant que le véhicule circule." : "Appel affiché au standard ; aucun trajet inventé.")
-          : "L’incident et les risques calculés apparaissent dans l’état actuel de la ville."}</p>
-    </div>
-    {onFocus && <button type="button" className="guided-focus" onClick={onFocus}>⌖ Voir la cible sur la carte</button>}
-  </div>;
+  </header>;
 }
 
 export default function App({ readonly = false, secured = false }) {
@@ -214,6 +176,7 @@ export default function App({ readonly = false, secured = false }) {
   const [audit, setAudit] = useState([]);
   const [replayOpen, setReplayOpen] = useState(false);
   const [notificationFilter, setNotificationFilter] = useState("NEW");
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationInbox, setNotificationInbox] = useState({ items: [], counts: {} });
   const [notificationError, setNotificationError] = useState(null);
   const [ackBusy, setAckBusy] = useState(null);
@@ -224,14 +187,47 @@ export default function App({ readonly = false, secured = false }) {
   const [missions, setMissions] = useState([]);
   const [flotte, setFlotte] = useState([]);
   const [appels, setAppels] = useState([]);
-  const [flux, setFlux] = useState(null);
-  const [guidedScenario, setGuidedScenario] = useState(null);
-  const [guidedBusy, setGuidedBusy] = useState(false);
-  const [guidedError, setGuidedError] = useState(null);
-  const [guidedDetails, setGuidedDetails] = useState(-1);
-  const [controlBusy, setControlBusy] = useState(false);
   const [comparateur, setComparateur] = useState(null);
+  const [operationsView, setOperationsView] = useState(null);
+  const operationsDialogRef = useRef(null);
+  const operationsTriggerRef = useRef(null);
   const soundLedgerFallback = useRef(new Map());
+
+  useEffect(() => {
+    if (!operationsView) return;
+    operationsDialogRef.current?.focus();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setOperationsView(null);
+        operationsTriggerRef.current?.focus();
+      } else if (event.key === "Tab") {
+        const dialog = operationsDialogRef.current;
+        if (!dialog) return;
+        const focusable = [...dialog.querySelectorAll('button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')];
+        const first = focusable[0];
+        const last = focusable.at(-1);
+        if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [operationsView]);
+
+  const fermerSuivi = () => {
+    setOperationsView(null);
+    operationsTriggerRef.current?.focus();
+  };
 
   // double bip court (standard d'urgence) via WebAudio — aucun fichier
   const bipAppel = () => {
@@ -260,23 +256,19 @@ export default function App({ readonly = false, secured = false }) {
 
   const refresh = async () => {
     try {
-      const [infraData, riskData, missionsData, flotteData, appelsData, fluxData, guidedData] =
+      const [infraData, riskData, missionsData, flotteData, appelsData] =
         await Promise.all([
           getInfrastructure(),
           getRisk(),
           getMissions(),
           getFleet(),
           getCalls(8),
-          getStream(),
-          getGuidedScenario().catch(() => null),
         ]);
       setInfra(infraData);
       setRisque(riskData);
       setMissions(missionsData);
       setFlotte(flotteData);
       setAppels(appelsData);
-      setFlux(fluxData);
-      if (guidedData) setGuidedScenario(guidedData);
       setErreur(null);
     } catch (exc) {
       setErreur(`Backend injoignable : ${exc.message}`);
@@ -288,36 +280,6 @@ export default function App({ readonly = false, secured = false }) {
     const timer = setInterval(refresh, 4000);
     return () => clearInterval(timer);
   }, []);
-
-  const piloterSimulation = async () => {
-    if (controlBusy || readonly || !flux) return;
-    const action = flux.online ? "stop" : "start";
-    setControlBusy(true);
-    try {
-      setFlux(await postStreamAction(action));
-      setToast(action === "start" ? "▶ Simulation démarrée par vous" : "■ Simulation arrêtée");
-      await refresh();
-    } catch (exc) {
-      setToast(`⛔ Commande impossible : ${exc.message}`);
-    } finally {
-      setControlBusy(false);
-    }
-  };
-
-  const avancerParcours = async (action) => {
-    if (guidedBusy || readonly || !flux?.online) return;
-    setGuidedBusy(true);
-    setGuidedError(null);
-    try {
-      setGuidedScenario(await postGuidedScenario(action));
-      setGuidedDetails(action === "reset" ? -1 : GUIDED_STEPS.findIndex((stage) => stage.action === action));
-      await refresh();
-    } catch (exc) {
-      setGuidedError(exc.message);
-    } finally {
-      setGuidedBusy(false);
-    }
-  };
 
   useEffect(() => {
     if (!secured || readonly) return;
@@ -438,6 +400,11 @@ export default function App({ readonly = false, secured = false }) {
   const missionsActives = missions.filter((m) =>
     ["EN_ROUTE", "DIVERTED", "BLOCKED"].includes(m.status)
   );
+  const missionASuivre = [...missionsActives].sort((a, b) => {
+    const priorite = { BLOCKED: 0, DIVERTED: 1, EN_ROUTE: 2 };
+    return (priorite[a.status] ?? 3) - (priorite[b.status] ?? 3)
+      || (a.remaining_min ?? Infinity) - (b.remaining_min ?? Infinity);
+  })[0];
 
   const risqueAffiche = risqueSelectionne ? riskById[risqueSelectionne.id] || null : null;
   const sourceActive = risqueAffiche?.sources?.find((source) => source.event_id === sourceEventId)
@@ -639,7 +606,7 @@ export default function App({ readonly = false, secured = false }) {
   };
 
   const declencher = async (definition) => {
-    if (!cible) return;
+    if ((readonly && !modeSimulation) || !cible || !definition.cibles.includes(cible.kind)) return;
 
     const contenu = {
       type: definition.type,
@@ -718,7 +685,7 @@ export default function App({ readonly = false, secured = false }) {
       return;
     }
     try {
-      const offre = await postRouteOptions(mission.origin_id, mission.destination_id, mission.profile);
+      const offre = await getMissionRouteOptions(mission.mission_id);
       setComparateur({ missionId: mission.mission_id, ...offre });
     } catch (exc) {
       setToast(`⛔ ${exc.message}`);
@@ -763,6 +730,7 @@ export default function App({ readonly = false, secured = false }) {
         </button>
         <button className="notification-entry" onClick={() => {
           setNotificationFilter("NEW");
+          setNotificationsOpen(true);
           document.getElementById("section-notifications")?.scrollIntoView({ behavior: "smooth", block: "start" });
         }} aria-label={`${notificationInbox.counts.NEW || 0} notifications à traiter`}>
           🔔 {notificationInbox.counts.NEW || 0} à traiter
@@ -849,78 +817,70 @@ export default function App({ readonly = false, secured = false }) {
           </div>
         </section>
 
-        <section className="simulation-panel">
-          <div className="section-titre">Pilotage de la simulation</div>
-
-          <div className={`flux-chip ${flux?.online ? "flux-live" : flux?.paused ? "flux-pause" : ""}`}>
-            <span className="flux-dot" />
-            <div className="flux-info">
-              <b>
-                {flux?.online
-                  ? "Simulation en cours"
-                  : flux?.paused
-                    ? "Flux en pause"
-                    : "Simulateur arrêté"}
-              </b>
-              <small>
-                {flux?.stats
-                  ? `${flux.stats.calls} appels · ${flux.stats.incidents} incidents · ${flux.stats.resolved || 0} résolus`
-                  : "…"}
-              </small>
-            </div>
+        <section className="manual-incidents-panel">
+          <div className="section-titre">Déclencher un incident</div>
+          <small>{modeSimulation ? "Projection uniquement : aucun incident enregistré." : "Incident enregistré dans la ville simulée, même sans flux automatique."}</small>
+          {readonly && <small>Lecture seule : résolution et déclenchement réservés à l'opérateur.</small>}
+          <div className="boutons-incident">
+            {TYPES_INCIDENT.map((d) => (
+              <button
+                key={d.type}
+                className={`btn ${d.classe}`}
+                disabled={(readonly && !modeSimulation) || !cible || !d.cibles.includes(cible.kind)}
+                onClick={() => declencher(d)}
+              >
+                {d.label}
+              </button>
+            ))}
           </div>
-
-          <div className="simulation-control">
-            <button type="button" onClick={piloterSimulation} disabled={readonly || controlBusy || !flux}
-              className={flux?.online ? "simulation-stop" : "simulation-start"}>
-              {controlBusy ? "Commande en cours…" : flux?.online ? "■ Arrêter le simulateur" : "▶ Démarrer le simulateur"}
-            </button>
-            <small>{readonly ? "Lecture seule : commande réservée à l'opérateur." : flux?.online
-              ? "Appels, incidents et météo alimentent la simulation."
-              : "Rien ne démarre automatiquement. Les premiers appels arrivent après 35 à 90 s."}</small>
-          </div>
-
-          <section className="guided-scenario" aria-label="Parcours de crise guidé">
-            <div className="section-titre">Parcours de crise guidé</div>
-            <p>Étapes déclenchées par vos clics. Le flux automatique continue à part. Pluie fictive, distincte d’Open-Meteo.</p>
-            {!flux?.online && <small>Démarrez vous-même le simulateur pour activer les étapes.</small>}
-            {guidedError && <small className="notification-error" role="alert">{guidedError}</small>}
-            {GUIDED_STEPS.map((stage, index) => {
-              const result = guidedScenario?.history[index];
-              return <div className="guided-step" key={stage.action}>
-                <button type="button" disabled={readonly || !flux?.online || guidedBusy || (guidedScenario?.step ?? 0) !== index}
-                  onClick={() => avancerParcours(stage.action)}>
-                  {result ? "✓ " : ""}{stage.label}
-                </button>
-                <small>{stage.detail}</small>
-                {result && <div className="guided-result">
-                  {stage.action === "ambulance"
-                    ? `Appel ${result.call_id} · ${result.mission_id ? `mission ${result.mission_id}` : result.call_status}`
-                    : `${result.target_id} · ${result.impact_count} site(s) potentiellement concernés`}
-                  <button type="button" className="guided-explain-toggle"
-                    aria-expanded={guidedDetails === index}
-                    onClick={() => setGuidedDetails((current) => current === index ? -1 : index)}>
-                    {guidedDetails === index ? "Masquer" : "Voir"} le raisonnement
-                  </button>
-                  {guidedDetails === index && <GuidedReasoning stage={stage.action} result={result}
-                    onFocus={infra.some((node) => node.id === (result.target_id || result.destination_id))
-                      ? () => {
-                        choisirLieuRecherche(infra.find((node) => node.id === (result.target_id || result.destination_id)));
-                        if (result.event_id) choisirSource(result.event_id);
-                      } : null} />}
-                </div>}
-              </div>;
-            })}
-            {(guidedScenario?.step ?? 0) > 0 && <button type="button" className="guided-reset"
-              disabled={readonly || !flux?.online || guidedBusy}
-              onClick={() => avancerParcours("reset")}>Recommencer le parcours</button>}
-            {(guidedScenario?.step ?? 0) > 0 && <small>Recommencer ne résout pas les incidents déjà créés.</small>}
-          </section>
-
         </section>
 
-        <section className="dispatcher-panel">
-          <div className="section-titre">Flotte et appels</div>
+        <section className="whatif-toggle-panel">
+          <details className="demo-guide">
+            <summary>Première démonstration</summary>
+            <ol>
+              <li>Activez le mode Simulation ci-dessous.</li>
+              <li>Recherchez le poste électrique P1 et sélectionnez-le sur la carte.</li>
+              <li>Choisissez la panne électrique, puis cliquez sur un site surligné pour lire les causes du risque estimé.</li>
+            </ol>
+          </details>
+          <button
+            type="button"
+            className={`basculer-whatif ${modeSimulation ? "actif" : ""}`}
+            aria-pressed={modeSimulation}
+            onClick={() => {
+              setModeSimulation((s) => !s);
+              setFantomes([]);
+              setPrediction(null);
+              setSelectedWhatifImpactId(null);
+            }}
+          >
+            <span>
+              <span className="nom">MODE SIMULATION</span>
+              <small>Prévoir sans modifier la ville</small>
+            </span>
+            <span className={`interrupteur ${modeSimulation ? "on" : ""}`} />
+          </button>
+        </section>
+
+        <section className="operations-summary" aria-label="Aperçu des missions">
+          <div className="section-titre">Suivi des missions</div>
+          <div className="operations-count"><strong>{missionsActives.length}</strong><span>mission{missionsActives.length > 1 ? "s" : ""} en cours</span></div>
+          {missionASuivre ? <div className="operations-featured">
+            <span>Mission à suivre</span>
+            <b>{missionASuivre.vehicle || "Convoi"} · {missionASuivre.destination_name || missionASuivre.destination_id}</b>
+            <small>{(STATUS_MISSION[missionASuivre.status] || {}).label || missionASuivre.status} · ETA {missionASuivre.remaining_min ?? "—"} min</small>
+          </div> : <p>Aucune mission active pour le moment.</p>}
+          <div className="operations-summary-actions">
+            <button type="button" ref={operationsTriggerRef} onClick={() => setOperationsView("missions")}>Voir les missions <span aria-hidden="true">→</span></button>
+            <button type="button" onClick={() => setOperationsView("resources")}>Flotte et appels <span aria-hidden="true">→</span></button>
+          </div>
+        </section>
+
+        {operationsView && <div className="operations-backdrop" onClick={fermerSuivi} aria-hidden="true" />}
+        {operationsView === "resources" && <section className="dispatcher-panel operations-drawer" role="dialog" aria-modal="true" aria-labelledby="operations-title" tabIndex={-1} ref={operationsDialogRef}>
+          <OperationsHeader view={operationsView} onView={setOperationsView} onClose={fermerSuivi} missionCount={missionsActives.length} />
+          <div className="section-titre">Flotte</div>
 
           <div className="flotte-liste">
             {flotte.length === 0 && (
@@ -969,10 +929,17 @@ export default function App({ readonly = false, secured = false }) {
               </div>
             ))}
           </div>
-        </section>
+        </section>}
 
         <section className="notification-panel" id="section-notifications">
-          <div className="section-titre">Centre de notifications</div>
+          <div className="notification-panel-header">
+            <div className="section-titre">Centre de notifications</div>
+            <span>{notificationInbox.counts.NEW || 0} à traiter</span>
+          </div>
+          <button type="button" className="notification-disclosure" aria-expanded={notificationsOpen} aria-controls="notification-details" onClick={() => setNotificationsOpen((open) => !open)}>
+            {notificationsOpen ? "Masquer les notifications" : "Consulter les notifications"}<span aria-hidden="true">{notificationsOpen ? "−" : "→"}</span>
+          </button>
+          <div id="notification-details" hidden={!notificationsOpen}>
           <p>Alertes conservées en base · actualisation toutes les 6 secondes.</p>
           <details className="method-details">
             <summary>Comment sont classées les alertes ?</summary>
@@ -1023,42 +990,6 @@ export default function App({ readonly = false, secured = false }) {
               </article>
             ))}
           </div>
-        </section>
-
-        <section className="manual-incidents-panel">
-          <div className="section-titre">Déclencher un incident</div>
-          {readonly && <small>Lecture seule : résolution et déclenchement réservés à l'opérateur.</small>}
-          <div className="boutons-incident">
-            {TYPES_INCIDENT.map((d) => (
-              <button
-                key={d.type}
-                className={`btn ${d.classe}`}
-                disabled={readonly || (!modeSimulation && !flux?.online) || !cible || !d.cibles.includes(cible.kind)}
-                onClick={() => declencher(d)}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="whatif-toggle-panel">
-          <div
-            className={`basculer-whatif ${modeSimulation ? "actif" : ""}`}
-            role="button"
-            tabIndex={0}
-            onClick={() => {
-              setModeSimulation((s) => !s);
-              setFantomes([]);
-              setPrediction(null);
-              setSelectedWhatifImpactId(null);
-            }}
-          >
-            <span>
-              <span className="nom">MODE SIMULATION</span>
-              <small>Prévoir sans modifier la ville</small>
-            </span>
-            <span className={`interrupteur ${modeSimulation ? "on" : ""}`} />
           </div>
         </section>
 
@@ -1126,7 +1057,8 @@ export default function App({ readonly = false, secured = false }) {
           )}
         </section>
 
-        <section className="missions-panel">
+        {operationsView === "missions" && <section className="missions-panel operations-drawer" role="dialog" aria-modal="true" aria-labelledby="operations-title" tabIndex={-1} ref={operationsDialogRef}>
+          <OperationsHeader view={operationsView} onView={setOperationsView} onClose={fermerSuivi} missionCount={missionsActives.length} />
           <div className="section-titre">Missions en cours ({missionsActives.length})</div>
           {missionsActives.length === 0 && (
             <div className="empty-state">Aucun véhicule en mission. La flotte veille.</div>
@@ -1154,6 +1086,7 @@ export default function App({ readonly = false, secured = false }) {
               <div className="mission-route" title={(m.route_names || []).join(" › ")}>
                 {(m.route || []).join(" › ")}
               </div>
+
 
               <div className="mission-actions">
                 <button
@@ -1191,14 +1124,19 @@ export default function App({ readonly = false, secured = false }) {
 
               {comparateur?.missionId === m.mission_id && (
                 <div className="comparateur">
-                  <div className="section-titre">🧭 3 itinéraires possibles</div>
+                  <div className="section-titre">Comparer les itinéraires</div>
+                  {comparateur.options.length === 0 && <p>Aucun itinéraire disponible.</p>}
                   {comparateur.options.map((o) => (
                     <div className={`comparateur-row v-${o.variant.toLowerCase()}`} key={o.variant}>
                       <span className="comp-label">{o.label}</span>
                       <span className="comp-mesures">
                         {o.estimated_time_min} min · {o.distance_km} km
                       </span>
-                      <small className="comp-routes">{o.route_names.join(" › ")}</small>
+                      <small className="comp-routes">
+                        {o.route_names.join(" › ")}
+                        <br />{o.geometry_source === "OPENSTREETMAP_OSRM" ? "Tracé OpenStreetMap · temps simulé" : "Tracé du graphe simulé · distance et temps indicatifs"}
+                        {o.uncertain_links?.length > 0 && <>. Liaisons à vérifier {o.uncertain_links.map((link) => link.join("–")).join(", ")}.</>}
+                      </small>
                       <button disabled={readonly} onClick={() => imposerVariante(m.mission_id, o.variant)}>
                         Imposer
                       </button>
@@ -1219,7 +1157,7 @@ export default function App({ readonly = false, secured = false }) {
               )}
             </article>
           ))}
-        </section>
+        </section>}
         {secured && !readonly && (
           <section className="audit-panel">
             <div className="section-titre">Journal des accès et décisions</div>
@@ -1252,7 +1190,6 @@ export default function App({ readonly = false, secured = false }) {
           sourceRisqueId={sourceActive?.event_id}
           itineraires={plan?.detours || []}
           missions={missionsActives}
-          featuredMissionId={guidedScenario?.history.find((step) => step.action === "ambulance")?.mission_id}
           options={comparateur?.options || []}
           notificationFocus={notificationFocus}
           notificationImpact={notificationImpact}
@@ -1361,8 +1298,10 @@ export default function App({ readonly = false, secured = false }) {
             </div>
             {sourceActive && (
               <div className="risk-cause">
-                <div className="risk-cause-observe">Incident enregistré dans la simulation · {ETYPES_FR[sourceActive.type] || sourceActive.type} sur {sourceActive.target_id} · intensité {NIVEAU(sourceActive.severity)}</div>
-                <div className="risk-cause-model">Dépendances estimées par le graphe · {sourceActive.depth} {sourceActive.depth > 1 ? "liens" : "lien"} · tracé schématique, pas un trajet routier</div>
+                <div className="risk-cause-observe"><b>Fait enregistré (simulation)</b> · {ETYPES_FR[sourceActive.type] || sourceActive.type} sur {sourceActive.target_id} · intensité {NIVEAU(sourceActive.severity)}</div>
+                <div className="risk-cause-model"><b>Effet estimé</b> · {propagationExplanation(sourceActive).effect}</div>
+                <div className="risk-cause-model"><b>Chemin du modèle</b> · {sourceActive.depth} {sourceActive.depth > 1 ? "liens" : "lien"} déclarés · tracé schématique, pas un trajet routier</div>
+                <div className="risk-cause-model"><b>Incertitude</b> · {propagationExplanation(sourceActive).uncertainty}</div>
                 <ol className="risk-chain">
                   {sourceActive.chain.map((etape, index) => (
                     <li key={`${etape.id}-${index}`}>

@@ -33,6 +33,7 @@ from app.services.risk import risk_class, score_node
 
 
 MAX_PROPAGATION_DEPTH = 5
+MAX_ROAD_ACCESS_DISTANCE_M = 5000  # tolérance large pour les points de référence des rues
 
 
 def _active_incidents() -> int:
@@ -56,11 +57,13 @@ def _propagation_rows(event_type: str, target_id: str) -> list[dict]:
     - POWER_FAILURE / CYBER_ATTACK :
         propagation via DEPENDS_ON.
     - ROAD_BLOCKED :
-        impact direct via CONNECTED_BY + impact logistique via SUPPLIED_BY.
+        accès direct via CONNECTED_BY, sans propagation à travers tout le
+        réseau routier ; approvisionnement seulement si l'entrepôt n'a pas
+        d'autre accès routier disponible.
     - HEAVY_RAIN :
         la cible est une Zone.
-        impact direct sur les infrastructures LOCATED_IN la zone
-        + impact transport via les routes de la zone.
+        exposition estimée des infrastructures LOCATED_IN la zone ;
+        aucune propagation inter-zones par route sans preuve d'inondation.
     """
 
     if event_type == "ROAD_BLOCKED":
@@ -70,32 +73,50 @@ def _propagation_rows(event_type: str, target_id: str) -> list[dict]:
 
             CALL (r) {{
 
-                MATCH p = (x:Infrastructure)-[:CONNECTED_BY*1..{MAX_PROPAGATION_DEPTH}]->(r)
+                MATCH (x:Infrastructure)-[:CONNECTED_BY]->(r)
+                WHERE (x:Road OR (
+                    x.lat IS NOT NULL AND x.lon IS NOT NULL
+                    AND r.lat IS NOT NULL AND r.lon IS NOT NULL
+                    AND point.distance(point({{latitude: x.lat, longitude: x.lon}}),
+                                       point({{latitude: r.lat, longitude: r.lon}})) <= $max_access_distance_m
+                )) AND (x:Road OR NOT EXISTS {{
+                    MATCH (x)-[:CONNECTED_BY]->(alternative:Road)
+                    WHERE alternative <> r AND coalesce(alternative.status, 'CLEAR') <> 'BLOCKED'
+                }})
 
                 RETURN
                     x.id AS id,
                     x.kind AS kind,
                     x.name AS name,
-                    length(p) AS depth,
+                    1 AS depth,
                     x.criticality AS criticality,
                     x.backup_power_hours AS backup_power_hours,
-                    [n IN reverse(nodes(p)) | {{id: n.id, name: n.name, kind: n.kind}}] AS chain
+                    [{{id: r.id, name: r.name, kind: r.kind}},
+                     {{id: x.id, name: x.name, kind: x.kind}}] AS chain
 
                 UNION
 
-                MATCH q = (warehouse:Warehouse:Infrastructure)
-                          -[:CONNECTED_BY*1..{MAX_PROPAGATION_DEPTH}]->(r)
+                MATCH (warehouse:Warehouse:Infrastructure)-[:CONNECTED_BY]->(r)
+                WHERE warehouse.lat IS NOT NULL AND warehouse.lon IS NOT NULL
+                  AND r.lat IS NOT NULL AND r.lon IS NOT NULL
+                  AND point.distance(point({{latitude: warehouse.lat, longitude: warehouse.lon}}),
+                                     point({{latitude: r.lat, longitude: r.lon}})) <= $max_access_distance_m
+                  AND NOT EXISTS {{
+                    MATCH (warehouse)-[:CONNECTED_BY]->(alternative:Road)
+                    WHERE alternative <> r AND coalesce(alternative.status, 'CLEAR') <> 'BLOCKED'
+                }}
                 MATCH (service:Infrastructure)-[:SUPPLIED_BY]->(warehouse)
 
                 RETURN
                     service.id AS id,
                     service.kind AS kind,
                     service.name AS name,
-                    length(q) + 1 AS depth,
+                    2 AS depth,
                     service.criticality AS criticality,
                     service.backup_power_hours AS backup_power_hours,
-                    [n IN reverse(nodes(q)) | {{id: n.id, name: n.name, kind: n.kind}}]
-                      + [{{id: service.id, name: service.name, kind: service.kind}}] AS chain
+                    [{{id: r.id, name: r.name, kind: r.kind}},
+                     {{id: warehouse.id, name: warehouse.name, kind: warehouse.kind}},
+                     {{id: service.id, name: service.name, kind: service.kind}}] AS chain
             }}
 
             RETURN DISTINCT
@@ -107,54 +128,20 @@ def _propagation_rows(event_type: str, target_id: str) -> list[dict]:
                 backup_power_hours,
                 chain
             """,
-            {"target_id": target_id},
+            {"target_id": target_id, "max_access_distance_m": MAX_ROAD_ACCESS_DISTANCE_M},
         )
 
     if event_type == "HEAVY_RAIN":
         return neo4j_client.query(
-            f"""
-            MATCH (z:Zone:Infrastructure {{id: $target_id}})
-
-            CALL (z) {{
-
-                MATCH (x:Infrastructure)-[:LOCATED_IN]->(z)
-                WHERE NOT x:Zone
-
-                RETURN
-                    x.id AS id,
-                    x.kind AS kind,
-                    x.name AS name,
-                    1 AS depth,
-                    x.criticality AS criticality,
-                    x.backup_power_hours AS backup_power_hours,
-                    [{{id: z.id, name: z.name, kind: z.kind}},
-                       {{id: x.id, name: x.name, kind: x.kind}}] AS chain
-
-                UNION
-
-                MATCH (r:Road:Infrastructure)-[:LOCATED_IN]->(z)
-                MATCH p = (x:Infrastructure)-[:CONNECTED_BY*1..{MAX_PROPAGATION_DEPTH}]->(r)
-                WHERE x <> r
-
-                RETURN
-                    x.id AS id,
-                    x.kind AS kind,
-                    x.name AS name,
-                    length(p) + 1 AS depth,
-                    x.criticality AS criticality,
-                    x.backup_power_hours AS backup_power_hours,
-                    [{{id: z.id, name: z.name, kind: z.kind}}]
-                      + [n IN reverse(nodes(p)) | {{id: n.id, name: n.name, kind: n.kind}}] AS chain
-            }}
-
-            RETURN DISTINCT
-                id,
-                kind,
-                name,
-                depth,
-                criticality,
-                backup_power_hours,
-                chain
+            """
+            MATCH (z:Zone:Infrastructure {id: $target_id})
+            MATCH (x:Infrastructure)-[:LOCATED_IN]->(z)
+            WHERE NOT x:Zone
+            RETURN x.id AS id, x.kind AS kind, x.name AS name,
+                   1 AS depth, x.criticality AS criticality,
+                   x.backup_power_hours AS backup_power_hours,
+                   [{id: z.id, name: z.name, kind: z.kind},
+                    {id: x.id, name: x.name, kind: x.kind}] AS chain
             """,
             {"target_id": target_id},
         )
@@ -274,6 +261,7 @@ def build_impact(
             backup_power_hours=row.get("backup_power_hours"),
             severity=severity,
             active_incidents=active_incidents,
+            event_type=event_type,
         )
 
         impacts.append(

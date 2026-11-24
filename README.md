@@ -1,75 +1,126 @@
-# Vigie Urbaine — simulateur de crises urbaines en cascade
+# Vigie Urbaine
 
-Console tactique académique pour le Grand Tunis. Les appels, agences, missions et incidents sont **simulés** ; les projections sont des estimations, pas des décisions opérationnelles ou des prévisions garanties.
+Vigie Urbaine est un simulateur académique de crises urbaines pour le Grand Tunis. Sa console cartographique permet de suivre un incident, de comprendre les risques qu’il fait peser sur les infrastructures et d’observer la réponse simulée, par exemple le changement d’itinéraire d’une ambulance lorsqu’une route est bloquée.
+
+## Ce que montre la démo
+
+| Fonction | Ce que l’on peut observer |
+| --- | --- |
+| Carte des infrastructures | Recherche par nom, identifiant ou type. La fiche d’un site expose les facteurs du score de risque. |
+| Incidents et risques | Propagation selon les dépendances du graphe, alertes et recommandations d’intervention. |
+| Projection What-if | Estimation des sites potentiellement concernés, des chaînes de dépendance et de l’incertitude, sans écriture dans les bases. |
+| Missions SAMU | Appel, affectation d’une ambulance, progression, détour et retour à la base. |
+| Relecture | Consultation d’instantanés de la crise collectés pendant le flux automatique, toutes les 30 secondes et conservés 24 heures. |
+
+## Architecture
+
+| Composant | Rôle |
+| --- | --- |
+| React, Vite et Leaflet | Console opérateur, carte OpenStreetMap et relecture. |
+| FastAPI | API des incidents, projections, alertes, missions et commandes de simulation. Vite transmet les requêtes `/api` au backend. |
+| Neo4j | Infrastructures, dépendances, routes et coûts de parcours. Le graphe initial est fourni dans [data/seed.cypher](data/seed.cypher). |
+| MongoDB | Incidents, appels, missions, flotte, notifications, historiques et sessions. |
 
 ## Démarrage local
 
-Prérequis : Docker, Python et Node.js. Choisir une instance de bases : pour l'ancienne simulation, `docker compose up -d` ; pour la nouvelle installation vierge, suivre la section ci-dessous. Installer `backend/requirements.txt`, démarrer `uvicorn app.main:app --host 127.0.0.1 --port 8000` depuis `backend`, puis `npm ci` et `npm run dev` depuis `frontend`. L'interface est sur `http://localhost:5173`. Lancer `npm run dev` **depuis `frontend`**, pas depuis la racine du dépôt.
+Installer Docker avec Compose, Python 3.11 ou plus récent, et Node.js 22.12 ou plus récent. Les commandes ci-dessous utilisent PowerShell.
 
-### Démarrage vierge sans effacer l'ancienne simulation
+**1. Démarrer les bases depuis la racine du dépôt.**
 
-L'instance `docker-compose.fresh.yml` utilise **d'autres volumes et d'autres ports** (MongoDB 27018, Neo4j 7688/7475). Les bases d'origine restent intactes. La configuration locale `backend/.env` pointe vers cette instance neuve ; l'ancienne configuration est conservée localement sous `backend/.env.previous` (fichier ignoré par Git). Pour préparer une autre machine : `docker compose -f docker-compose.fresh.yml up -d --wait`, puis `docker compose -f docker-compose.fresh.yml exec -T neo4j cypher-shell -u neo4j -p urbanbutterfly -f /seed.cypher` et définir `MONGO_URI=mongodb://admin:urbanbutterfly@localhost:27018`, `MONGO_DB=urban_butterfly_clean`, `NEO4J_URI=bolt://localhost:7688` dans `backend/.env`. Les valeurs par défaut sont réservées à la démonstration locale. Ne jamais utiliser `docker compose down -v` pour revenir à une ancienne instance.
+```powershell
+docker compose -f docker-compose.fresh.yml up -d --wait
+docker compose -f docker-compose.fresh.yml exec -T neo4j cypher-shell -u neo4j -p urbanbutterfly -f /seed.cypher
+```
 
-Au lancement de l'API, le **simulateur reste arrêté** : il ne génère ni appel, ni incident, ni notification. L'opérateur clique « Démarrer le simulateur » pour déclencher le flux, et « Arrêter » pour le suspendre. Les actions restent enregistrées en base, mais ne sont plus affichées dans la console. La relecture et les rappels automatiques ne tournent que pendant la simulation. Les projections « What-if » restent utilisables sans modifier la crise.
+Importer le seed à la première initialisation. Cette configuration utilise des volumes distincts de ceux de `docker-compose.yml`. Pour arrêter les bases en conservant les données, utiliser `docker compose -f docker-compose.fresh.yml stop`.
 
-Le **parcours de crise guidé** se pilote ensuite étape par étape : pluie extrême **fictive** sur une zone (distincte des mesures Open-Meteo), appel médical avec mission d'ambulance, blocage d'une route en avant de son trajet si un détour existe, puis panne électrique. Les voisins d'une route bloquée deviennent congestionnés dans le modèle ; une ambulance en route recalcule aussi son itinéraire lorsqu'un bouchon rend un autre chemin préférable. Si aucun véhicule ou détour n'est disponible, l'interface l'indique sans inventer une mission réussie. Recommencer le parcours ne résout pas les anciens incidents ; aucune étape ni le simulateur ne démarre sans clic de l'opérateur.
-Pour une présentation au jury, « Voir le raisonnement » affiche pour chaque étape le fait enregistré, les exemples d'impacts estimés (chaînes et motifs du modèle), puis la décision visible : ambulance, itinéraire initial, rues congestionnées et détour. Ces instantanés correspondent à l'étape déclenchée et restent distincts des autres incidents du flux automatique, qui continue en parallèle. « Voir la cible sur la carte » centre la carte sur l'infrastructure concernée. Les scores et les contours sont des estimations, pas des dégâts observés.
-La carte masque par défaut les tracés des routes saines et ne met en évidence qu'une mission à la fois (priorité à l'ambulance du parcours guidé) ; les marqueurs, blocages et impacts restent visibles. Les commandes « Routes de fond », « Tous les trajets » et le choix de mission permettent de réafficher les tracés à la demande, sans modifier les données.
+**2. Créer un fichier `backend/.env`** avec les valeurs de la démo locale.
 
-Pour revenir à l'ancienne installation, redémarrer ses bases avec `docker compose up -d`, remettre `backend/.env.previous` à la place de `backend/.env` puis redémarrer l'API. Ne pas supprimer les volumes Docker. Le journal conserve toutes les actions en base ; elles restent consultables via `GET /integration/activity` (pagination possible), sans panneau dans la console.
+```dotenv
+NEO4J_URI=bolt://127.0.0.1:7688
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=urbanbutterfly
+MONGO_URI=mongodb://admin:urbanbutterfly@127.0.0.1:27018
+MONGO_DB=urban_butterfly_clean
+SECURITY_MODE=demo
+```
 
-`SECURITY_MODE=demo` conserve l'accès local non authentifié pour l'enseignement. **Ne jamais rendre l'API, Vite ou les bases accessibles depuis Internet dans ce mode.** Les ports des bases sont limités à `127.0.0.1` par défaut.
+**3. Lancer l’API dans un terminal.**
 
-## Mode simulation sécurisée
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
 
-1. Définir `MONGO_PASSWORD` et `NEO4J_PASSWORD` dans un `.env` **à la racine** (lu par Docker Compose), puis modifier les URI correspondantes dans `backend/.env` (lu par FastAPI). Pour des volumes Docker déjà initialisés, changer le mot de passe **dans la base existante** : modifier la variable Compose seule ne réinitialise pas les identifiants. Ne pas supprimer les volumes contenant des incidents.
-2. Définir `SECURITY_MODE=secure`, `AUTH_OPERATOR_PASSWORD` (14 caractères minimum), `AUTH_AGENCY_KEY` (32 minimum) et éventuellement `AUTH_VIEWER_PASSWORD` (14 minimum). Générer des secrets aléatoires hors du dépôt.
-3. Se connecter avec `operateur` ou `observateur`. L'observateur lit la situation et peut faire des projections, mais ne modifie ni incidents ni missions. Les intégrations externes POST `/integration/calls` et POST `/integration/fleet-updates` acceptent `X-Agency-Key`; cette clé n'ouvre pas la console. Les autres mutations exigent une session opérateur.
-4. Pour un accès réseau, mettre un reverse proxy HTTPS devant le frontend et l'API **sous la même origine** (`/api` vers l'API, en retirant le préfixe), définir `AUTH_COOKIE_SECURE=true` et `AUTH_ALLOWED_ORIGINS=https://votre-domaine`, puis bloquer l'accès direct à l'API, Vite et aux bases. La configuration locale ne constitue pas à elle seule un déploiement Internet sécurisé.
+**4. Lancer la console dans un second terminal, depuis la racine.**
 
-Les sessions expirent au bout de huit heures et sont invalidées à la déconnexion. Les actions HTTP en mode sécurisé sont enregistrées dans `audit_log` (acteur, chemin, date, code de réponse ; aucun corps ni mot de passe). Les journaux restent à sauvegarder et à protéger. Les tentatives de connexion sont temporairement limitées. L'API `/health` est publique et ne révèle que l'état des services.
+```powershell
+cd frontend
+npm ci
+npm run dev -- --host 127.0.0.1
+```
 
-## Relecture de crise
+Ouvrir la [console](http://127.0.0.1:5173), la [documentation interactive de l’API](http://127.0.0.1:8000/docs) ou le [contrôle de santé](http://127.0.0.1:8000/health).
 
-Pendant que le simulateur est lancé, un instantané de la situation est conservé toutes les **30 secondes** dans `crisis_snapshots` (rétention **24 heures**). Aucun instantané n'est créé avant le lancement manuel. Le bouton « Relecture de crise » ouvre une vue indépendante en lecture seule : risques, statuts des infrastructures et de la flotte, incidents et missions observés. L'API `GET /replay` liste les captures (pagination `before` possible), `GET /replay/{id}` renvoie un instantané.
+## Trois façons de faire la démonstration
 
-Ces archives ne reconstruisent **pas** la période antérieure à leur activation ; les scores passés ne sont jamais recalculés avec le graphe actuel. MongoDB et Neo4j sont lus successivement dans une courte fenêtre, pas dans une transaction commune. La carte utilise la géométrie de référence actuelle, mais les statuts et scores enregistrés. L'archive n'exécute aucune action sur la crise vivante.
+### Projection sur la carte
 
-## Centre de notifications
+1. Activer **Mode Simulation** dans la console.
+2. Rechercher et sélectionner le poste électrique `P1`.
+3. Choisir la panne électrique. Cliquer sur un site surligné pour voir la chaîne de dépendance et les facteurs de son score.
 
-Les incidents, appels et arrivées/blocages de mission créent des alertes conservées dans MongoDB (`notifications`). Chaque alerte affiche le lieu, l'heure, la source, la gravité et l'état **à traiter / pris en compte / résolu**. La prise en compte par un opérateur ne résout pas l'incident : elle enregistre uniquement qui a vu l'alerte. Les incidents résolus passent automatiquement à « résolu ». Les événements encore actifs et les appels en attente sont retrouvés au démarrage ; l'historique clos n'est pas transformé en nouvelles alertes. La console actualise la boîte toutes les six secondes. En mode sécurisé, l'observateur peut lire mais pas acquitter.
+### Appel SAMU et détour manuel
 
-Le bouton « Voir le lieu sur la carte » sélectionne le site, centre la carte et affiche l'origine et l'explication de l'alerte, sans l'acquitter ni modifier l'incident. Pour un incident ouvert, l'impact potentiel est calculé en lecture seule sur l'état actuel : les sites estimés apparaissent en pointillés, distincts du fait enregistré. Un incident clos ne reçoit pas de nouvelle estimation courante. Cette estimation n'est ni un dommage constaté ni une mutation de la crise.
-Les signaux des nouvelles urgences sont dédupliqués par identifiant de notification dans le stockage local du navigateur, y compris après rechargement. Au premier accès, les alertes déjà présentes sont affichées sans son ; ensuite, les alertes nouvelles pendant une déconnexion sont signalées à la reprise. Les alertes non urgentes restent silencieuses. En cas de stockage local désactivé, ce suivi ne survit pas à un rechargement ; l'affichage des notifications en base reste disponible. Le navigateur peut également bloquer la lecture audio automatique.
+Depuis `backend`, avec l’API démarrée, utiliser [le script de simulation](backend/scripts/simulation.py). Cette démonstration enregistre les actions dans les bases locales. La mission manuelle avance même si le flux automatique est arrêté.
 
-## Fraîcheur des sources
+```powershell
+.\.venv\Scripts\python.exe scripts\simulation.py appel H3
+.\.venv\Scripts\python.exe scripts\simulation.py missions
+.\.venv\Scripts\python.exe scripts\simulation.py detours M-01
+.\.venv\Scripts\python.exe scripts\simulation.py incident route R3
+.\.venv\Scripts\python.exe scripts\simulation.py comparer M-01
+.\.venv\Scripts\python.exe scripts\simulation.py court M-01
+.\.venv\Scripts\python.exe scripts\simulation.py resoudre ID_INCIDENT
+```
 
-La console n'affiche plus le détail des canaux, pour garder une interface légère. `GET /integration/sources` reste disponible pour consulter la dernière **donnée reçue** des appels CACU, de la voirie, du SIEM, du SCADA, des quatre zones Open-Meteo et des mises à jour de flotte d'agence, sans écrire d'incident. La météo, interrogée périodiquement, est marquée « mesure en retard » au-delà de quatre minutes ; une réponse météo vide n'est pas une mesure. Les autres flux événementiels peuvent rester silencieux sans être en panne : au-delà de trente minutes, « silence prolongé » ne conclut pas à une défaillance. Une pause du simulateur et un générateur arrêté sont signalés séparément ; une mise à jour de flotte calculée localement ne se fait pas passer pour une réception d'agence. Ce suivi n'est pas une supervision réseau de fournisseurs réels.
+Remplacer `M-01` par l’identifiant affiché, `R3` par une route proposée par `detours` et `ID_INCIDENT` par l’identifiant du blocage. La mission doit être encore en route pendant le test. Pour les autres commandes, utiliser `scripts\simulation.py --help`. En mode sécurisé, placer `--connexion` avant la sous-commande.
 
-## Priorité de lecture des notifications
+### Flux automatique et scénario guidé
 
-Les alertes « à traiter » sont classées dans la console par un score **calculé à l'affichage** : gravité enregistrée, ancienneté et hôpital ciblé ou potentiellement concerné selon le modèle de risque actuel. La mention P1/P2/P3 est une aide à la lecture, pas une gravité constatée ni une instruction d'intervention ; elle ne modifie ni MongoDB ni l'état d'un incident. Les alertes prises en compte ou résolues restent triées chronologiquement. La liste est bornée aux 500 dernières alertes de l'état choisi ; si elle est tronquée, la console le signale.
+Le flux démarre sur action explicite. Depuis la [documentation interactive](http://127.0.0.1:8000/docs), appeler `POST /integration/stream` avec `{"action":"start"}`. Le premier appel automatique survient après 35 à 90 secondes et le premier incident après 110 à 240 secondes. L’action `stop` arrête le flux et l’enregistrement des instantanés.
 
-## Recherche sur la carte
+Pendant que le flux tourne sur une instance de démo, `POST /integration/scenario` permet d’avancer pas à pas avec les actions `rain`, `ambulance`, `block` et `power`. Le blocage demande une mission en cours et une route avec un détour possible. `GET /integration/scenario` affiche la progression, `GET /integration/sources` la fraîcheur des canaux et `GET /integration/activity` le journal.
 
-La recherche au-dessus de la carte propose dès la première lettre les infrastructures cartographiées (postes électriques, antennes, rues/routes et autres sites), par nom, identifiant ou type, sans tenir compte des accents. Les débuts de nom sont prioritaires ; sélectionner une suggestion centre la carte et ouvre sa fiche, tandis qu'une rue avec tracé est cadrée dans son ensemble. Cette recherche porte uniquement sur les lieux présents dans le graphe, pas sur toutes les adresses de la ville.
+## Tests
 
-## Emprises estimées sur la carte
+Depuis `backend` :
 
-Après une projection « What-if », cliquer sur le cercle d'un site estimé touché ou sur son nom dans la liste affiche l'incident hypothétique, la chaîne de liens retenue par le graphe et les raisons du score de risque. Cette explication reste une estimation : aucun incident ni dommage n'est enregistré par ce clic.
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
 
-En présence de risques calculés dans l'état courant, lorsqu'un incident ouvert est consulté ou qu'un scénario « What-if » est exécuté, la carte regroupe les sites impactés **selon le modèle** en ensembles proches et trace des enveloppes de visualisation en pointillés, avec une marge graphique de 200 mètres. Le scénario « What-if » remplace temporairement la vue agrégée des risques courants. Le bouton permet d'afficher toutes les emprises. Ces contours ne sont **ni** une prévision de propagation géophysique **ni** des zones entièrement touchées : seules les positions des sites calculés servent au dessin. L'incertitude affichée est qualitative et non calibrée (élevée si des sites manquent de coordonnées ou si la profondeur de dépendance atteint trois, modérée sinon). Le nombre de sites non géolocalisés est mentionné ; aucun statut ni incident n'est changé par cette représentation. Le scénario hypothétique reste affiché une minute ou jusqu'à son effacement manuel.
+Depuis `frontend` :
 
-## Vérification
+```powershell
+npm ci
+npm test
+npm run build
+```
 
-Pour les tests, installer `backend/requirements-dev.txt`. Depuis `backend` : `python -m unittest discover -s tests -v`. Depuis `frontend` : `npm test` puis `npm run build`. Les parcours HTTP isolés utilisent Mongo en mémoire et un graphe routier contrôlé : ils vérifient appel → mission → arrivée → retour à base et incident → projection → résolution → historique sans modifier les bases de la simulation en cours. Les tests couvrent aussi les accès anonymes, les rôles, la clé d'agence et l'échappement des textes de la carte.
+Les tests backend des parcours HTTP utilisent un MongoDB en mémoire et un graphe contrôlé. Ils couvrent notamment l’affectation de la flotte, le reroutage, la résolution, l’historique et les droits d’accès.
 
-## Étapes vers un prototype de production complet
+## Hypothèses et limites
 
-- Scénarios de crise **reproductibles** avec paramètres et amorce aléatoire contrôlés ; la relecture temporelle observée est livrée, mais n'est pas un moteur de rejeu déterministe des événements.
-- Parcours HTTP isolés livrés ; encore nécessaires : tests de bout en bout sur de vraies bases isolées, charge, pannes MongoDB/Neo4j et mesures de latence avec objectifs chiffrés.
-- Validation métier des dépendances et des scores de risques ; justification et incertitude explicites dans chaque recommandation.
-- Sauvegarde/restauration vérifiées, migrations, rétention des journaux, supervision et déploiement HTTPS reproductible.
-- Revue de sécurité et exercices opérateur avant toute utilisation hors du cadre de simulation.
+- Les risques et recommandations sont des estimations du modèle. Une pluie indique une exposition possible et une route bloquée peut réduire l’accès à un site ou retarder son approvisionnement.
+- Les itinéraires restent indicatifs. La console signale les liaisons douteuses et indique la provenance du tracé. Le détour via R28 comporte quatre arcs orientés issus de trajets OpenStreetMap calculés par OSRM. Le reste du réseau nécessite une validation géographique. Voir [l’audit routier](docs/audit-graphe.md).
+- La relecture restitue les instantanés disponibles. Une exploitation au-delà de la démo requiert des tests sur bases réelles, une validation métier, la supervision et des sauvegardes vérifiées.
 
-**Aucun de ces points futurs n'est présenté comme déjà livré.**
+## Mode sécurisé
+
+Réserver le mode `demo` à la machine locale. Pour activer les rôles, définir `SECURITY_MODE=secure`, `AUTH_OPERATOR_PASSWORD` (14 caractères minimum), `AUTH_AGENCY_KEY` (32 minimum) et, si nécessaire, `AUTH_VIEWER_PASSWORD` (14 minimum). L’opérateur gère les incidents et les missions. L’observateur consulte la situation et peut lancer une projection. Les intégrations d’agences utilisent `X-Agency-Key` pour les appels et les mises à jour de flotte.
+
+Docker Compose lit les mots de passe des bases depuis le `.env` de la racine. FastAPI lit ses paramètres depuis `backend/.env`. Sur un volume existant, changer les mots de passe dans les bases elles-mêmes. Pour un accès réseau, servir le frontend et `/api` derrière un proxy HTTPS de même origine, configurer `AUTH_COOKIE_SECURE=true` et `AUTH_ALLOWED_ORIGINS`, puis réserver les ports des services au réseau interne. Les fichiers locaux contenant des secrets sont ignorés par Git.

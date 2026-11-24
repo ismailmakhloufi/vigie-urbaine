@@ -21,6 +21,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from app.db.neo4j_client import neo4j_client
 from app.services import dispatcher, fleet, missions
 from app.services import sources
 from app.services import source_health, replay, simulation_activity, guided_scenario
@@ -90,6 +91,44 @@ def incoming_call(call: IncomingCall):
         raise HTTPException(404, str(exc))
     except RuntimeError as exc:
         raise HTTPException(409, str(exc))
+
+
+@router.post("/demo/medical-call")
+def manual_medical_call(call: IncomingCall):
+    """Appel volontaire de la console ; sa mission avance même si le flux est arrêté."""
+    if not neo4j_client.query(
+        "MATCH (h:Hospital:Infrastructure {id: $id}) RETURN h.id AS id",
+        {"id": call.destination_id.upper().strip()},
+    ):
+        raise HTTPException(422, "Choisissez un hôpital comme destination de l'appel SAMU.")
+    try:
+        fleet.ensure_fleet()
+        return dispatcher.create_call("MEDICAL", call.destination_id,
+                                      call.note or "Appel SAMU simulé, déclenché manuellement",
+                                      demo_manual=True)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.get("/missions/{mission_id}/demo-detours")
+def demo_detours(mission_id: str):
+    doc = missions.mongo_client.get_mission(mission_id)
+    if not doc:
+        raise HTTPException(404, "Mission introuvable")
+    return {"mission_id": mission_id, "candidates": missions.short_detour_candidates(doc)}
+
+
+@router.get("/missions/{mission_id}/route-options")
+def mission_route_options(mission_id: str):
+    doc = missions.mongo_client.get_mission(mission_id)
+    if not doc:
+        raise HTTPException(404, "Mission introuvable")
+    if doc["status"] not in ("EN_ROUTE", "DIVERTED"):
+        raise HTTPException(409, "La mission n'est plus en route")
+    current = doc["route"][missions.current_road_index(doc)]
+    return compute_route_options(current, doc["destination_id"], doc["profile"])
 
 
 @router.post("/integration/calls/random")

@@ -13,6 +13,7 @@ import datetime as _dt
 
 from app.db.mongo_client import mongo_client
 from app.db.neo4j_client import neo4j_client
+from app.services.routing import road_link_is_usable
 
 # heures de pointe Grand Tunis : le trafic sature plus vite
 # (matin 07h-09h, soir 16h-19h)
@@ -51,6 +52,8 @@ def congestion_map() -> dict[str, int]:
             coef = _coefficient_pointe()
             for row in neighbors:
                 rid = row["id"]
+                if not road_link_is_usable(target, rid):
+                    continue
                 bump = max(1, round((weight // 2) * coef))
                 bumps[rid] = bumps.get(rid, 0) + bump
 

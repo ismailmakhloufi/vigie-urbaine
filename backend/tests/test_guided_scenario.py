@@ -252,6 +252,25 @@ class RoutingPreviewTests(unittest.TestCase):
         self.assertEqual(detour["route"], ["R1", "R3", "R4"])
         self.assertEqual(active, set())
 
+    def test_variante_courte_optimise_distance_mais_annonce_un_temps(self):
+        roads = {rid: {"name": rid, "status": "CLEAR", "flood": 1,
+                       "zone_id": "Z1", "zone_name": "Centre"}
+                 for rid in ("R1", "R2", "R3", "R4")}
+        edges = [{"src": a, "dst": b, "km": km, "minutes": mins,
+                  "traffic": 1, "flood": 1}
+                 for a, b, km, mins in (("R1", "R2", 1, 10), ("R2", "R4", 1, 10),
+                                        ("R1", "R3", 2, 1), ("R3", "R4", 2, 1))]
+        with patch("app.services.routing._reseau", return_value=(roads, edges)), \
+             patch("app.services.routing._active_dynamic_state", return_value=(set(), set(), [])), \
+             patch("app.services.routing._access_road", side_effect=lambda node, blocked: (node, 0)), \
+             patch("app.services.routing.neo4j_client.query", side_effect=lambda cypher, params=None:
+                   [] if "r.path AS path" in cypher else [{"name": "route", "kind": "Road"}]), \
+             patch("app.services.traffic.congestion_map", return_value={}):
+            short = routing.compute_route("R1", "R4", mode="SHORT")
+        self.assertEqual(short["route"], ["R1", "R2", "R4"])
+        self.assertEqual(short["distance_km"], 2)
+        self.assertEqual(short["estimated_time_min"], 16)
+
 
 if __name__ == "__main__":
     unittest.main()

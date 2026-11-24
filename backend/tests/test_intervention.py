@@ -42,7 +42,7 @@ class InterventionTests(unittest.TestCase):
         compute.side_effect = calcul
         result = preview_resolution("e1")
         h4 = next(node for node in result["nodes"] if node["id"] == "H4")
-        self.assertEqual((h4["before"], h4["after"], h4["reduction"]), (95, 60, 35))
+        self.assertEqual((h4["before"], h4["after"], h4["reduction"]), (95, 40, 55))
         self.assertEqual(result["no_longer_exposed"], 1)  # T2 n'a plus de source
         self.assertEqual(result["changed_count"], 2)
         self.assertEqual(result["incidents_after"], 1)

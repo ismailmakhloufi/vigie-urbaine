@@ -1,6 +1,7 @@
 import { NATURES_FR } from "./libelles.js";
 
 const ALIASES = {
+  Hospital: "hopital hopitaux clinique urgence",
   PowerStation: "poste electrique postes electriques centrale energie",
   TelecomTower: "antenne antennes telecom relais",
   Road: "rue rues route routes avenue boulevard voie voirie",
